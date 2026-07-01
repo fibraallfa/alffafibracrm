@@ -28,7 +28,7 @@ export function SettingsPanel() {
   }, [setTheme, user.data?.theme]);
 
   async function changeTheme(nextTheme: "light" | "dark") {
-    if (!user.data || user.data.role !== "ADMIN") return;
+    if (!user.data) return;
     themeChangedByUser.current = true;
     setSelectedTheme(nextTheme);
     setTheme(nextTheme);
@@ -39,7 +39,11 @@ export function SettingsPanel() {
     const response = await fetch("/api/profile", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: user.data.name, email: user.data.email, theme: nextTheme }),
+      body: JSON.stringify(
+        user.data.role === "ADMIN"
+          ? { name: user.data.name, email: user.data.email, theme: nextTheme }
+          : { theme: nextTheme },
+      ),
     });
     const result = (await response.json()) as ApiResult<unknown>;
     setProfileMessage(result.message);
@@ -72,6 +76,11 @@ export function SettingsPanel() {
           <fieldset><legend className="mb-2 text-sm font-medium">Tema do sistema</legend><div className="grid grid-cols-2 gap-3"><ThemeOption label="Claro" icon={<Sun className="h-5 w-5" />} selected={selectedTheme === "light"} onClick={() => void changeTheme("light")} /><ThemeOption label="Escuro" icon={<Moon className="h-5 w-5" />} selected={selectedTheme === "dark"} onClick={() => void changeTheme("dark")} /></div><p className="mt-2 text-xs text-muted-foreground">A mudança é aplicada e salva imediatamente.</p></fieldset>
           {profileMessage && <p className="text-sm text-muted-foreground">{profileMessage}</p>}<Button disabled={saving}><Save className="h-4 w-4" />Salvar perfil</Button>
         </form>
+      </CardContent></Card> : null}
+
+      {!isAdmin ? <Card><CardHeader><CardTitle className="flex items-center gap-2"><Moon className="h-5 w-5" />Tema do sistema</CardTitle><CardDescription>Escolha a aparência do seu acesso</CardDescription></CardHeader><CardContent>
+        <div className="grid grid-cols-2 gap-3"><ThemeOption label="Claro" icon={<Sun className="h-5 w-5" />} selected={selectedTheme === "light"} onClick={() => void changeTheme("light")} /><ThemeOption label="Escuro" icon={<Moon className="h-5 w-5" />} selected={selectedTheme === "dark"} onClick={() => void changeTheme("dark")} /></div>
+        {profileMessage && <p className="mt-3 text-sm text-muted-foreground">{profileMessage}</p>}
       </CardContent></Card> : null}
 
       <Card><CardHeader><CardTitle className="flex items-center gap-2"><KeyRound className="h-5 w-5" />Alterar senha</CardTitle><CardDescription>Use uma senha com pelo menos oito caracteres</CardDescription></CardHeader><CardContent><form className="space-y-3" onSubmit={changePassword}><Input name="currentPassword" type="password" placeholder="Senha atual" required /><Input name="newPassword" type="password" minLength={8} placeholder="Nova senha" required /><Input name="confirmPassword" type="password" minLength={8} placeholder="Confirmar nova senha" required />{passwordMessage && <p className="text-sm text-muted-foreground">{passwordMessage}</p>}<Button disabled={saving}><ShieldCheck className="h-4 w-4" />Alterar senha</Button></form></CardContent></Card>

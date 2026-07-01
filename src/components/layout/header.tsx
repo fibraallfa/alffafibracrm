@@ -15,13 +15,27 @@ type HeaderProps = {
 export function Header({ title }: HeaderProps) {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
-  const { data: user } = useCurrentUser();
+  const currentUser = useCurrentUser();
+  const { data: user } = currentUser;
   const isDark = theme === "dark";
 
   useEffect(() => {
     if (!user) return;
-    setTheme(user.role === "ADMIN" && user.theme === "dark" ? "dark" : "light");
-  }, [setTheme, user?.id, user?.role, user?.theme]);
+    setTheme(user.theme === "dark" ? "dark" : "light");
+  }, [setTheme, user?.id, user?.theme]);
+
+  async function toggleTheme() {
+    const nextTheme = isDark ? "light" : "dark";
+    setTheme(nextTheme);
+    document.documentElement.classList.toggle("dark", nextTheme === "dark");
+    document.documentElement.style.colorScheme = nextTheme;
+    await fetch("/api/profile", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: nextTheme }),
+    });
+    await currentUser.refresh();
+  }
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -41,16 +55,16 @@ export function Header({ title }: HeaderProps) {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {user?.role === "ADMIN" ? <Button
+          <Button
             variant="outline"
             size="icon"
             type="button"
             aria-label="Alternar tema"
             title="Alternar tema"
-            onClick={() => setTheme(isDark ? "light" : "dark")}
+            onClick={() => void toggleTheme()}
           >
             {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button> : null}
+          </Button>
           <div className="hidden text-right sm:block">
             <p className="text-sm font-medium">{user?.name ?? "Usuário"}</p>
             <button className="text-xs text-muted-foreground hover:text-foreground" onClick={logout} type="button">

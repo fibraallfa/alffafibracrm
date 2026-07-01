@@ -7,23 +7,35 @@ import { requireCurrentUser } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 
 const profileSchema = z.object({
-  name: z.string().min(2, "Informe o nome completo."),
-  email: z.string().email("Informe um e-mail válido."),
+  name: z.string().min(2, "Informe o nome completo.").optional(),
+  email: z.string().email("Informe um e-mail válido.").optional(),
   theme: z.enum(["light", "dark"]),
 });
 
 export async function PUT(request: Request) {
   try {
     const user = await requireCurrentUser();
-    if (user.role !== "ADMIN") throw new Error("FORBIDDEN");
     const input = profileSchema.parse(await request.json());
+    if (user.role === "ADMIN" && (input.name === undefined || input.email === undefined)) {
+      const updated = await prisma.user.update({
+        where: { id: user.id },
+        data: { theme: input.theme },
+        select: { id: true, name: true, email: true, role: true, status: true, permissions: true, avatarUrl: true, theme: true },
+      });
+      return NextResponse.json(successResponse("Tema atualizado.", updated));
+    }
     const updated = await prisma.user.update({
       where: { id: user.id },
-      data: { name: input.name.trim(), email: input.email.toLowerCase().trim(), theme: input.theme },
+      data: {
+        ...(user.role === "ADMIN" && input.name && input.email
+          ? { name: input.name.trim(), email: input.email.toLowerCase().trim() }
+          : {}),
+        theme: input.theme,
+      },
       select: { id: true, name: true, email: true, role: true, status: true, permissions: true, avatarUrl: true, theme: true },
     });
-    await prisma.auditLog.create({ data: { userId: user.id, action: "UPDATE", module: "profile", description: "Perfil e preferências atualizados." } });
-    return NextResponse.json(successResponse("Perfil atualizado.", updated));
+    await prisma.auditLog.create({ data: { userId: user.id, action: "UPDATE", module: "profile", description: user.role === "ADMIN" && input.name && input.email ? "Perfil e preferências atualizados." : "Tema atualizado." } });
+    return NextResponse.json(successResponse(user.role === "ADMIN" && input.name && input.email ? "Perfil atualizado." : "Tema atualizado.", updated));
   } catch (error) {
     const authError = authErrorResponse(error);
     if (authError) return authError;
