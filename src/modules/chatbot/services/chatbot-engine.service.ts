@@ -46,12 +46,21 @@ export class ChatbotEngineService {
     const agent = await this.chatbotRepository.getAgentByInstance(input.instanceId);
     const conversation = await this.chatbotRepository.findOrCreateConversation(phone, agent?.id);
 
-    if (!alreadyReceived) {
+    if (!alreadyReceived && input.providerId) {
+      const claimed = await this.chatbotRepository.claimInboundMessage({
+        conversationId: conversation.id,
+        body: input.message,
+        providerId: input.providerId,
+        rawPayload: input.rawPayload ?? {},
+      });
+      if (!claimed) {
+        return { state: "DUPLICATED", replied: false, delayMs: 0 };
+      }
+    } else if (!alreadyReceived) {
       await this.chatbotRepository.saveMessage({
         conversationId: conversation.id,
         direction: "inbound",
         body: input.message,
-        providerId: input.providerId,
         rawPayload: input.rawPayload ?? {},
       });
     }
@@ -121,6 +130,15 @@ export class ChatbotEngineService {
         state: "HUMAN_HANDOFF",
         memory,
         reply: "Combinado, vou sinalizar para um consultor humano continuar seu atendimento por aqui. 😊",
+      };
+    }
+
+    if (asksForPlanList(text)) {
+      const plans = await this.getPlans(input.agent);
+      return {
+        state: input.state,
+        memory,
+        reply: `Claro! 😊 Estes são os planos disponíveis:\n\n${formatPlanList(plans)}\n\n${promptForState(input.state, firstName)}`,
       };
     }
 

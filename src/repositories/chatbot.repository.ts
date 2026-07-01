@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export class ChatbotRepository {
@@ -48,6 +48,28 @@ export class ChatbotRepository {
     return prisma.chatMessage.create({
       data: input,
     });
+  }
+
+  async claimInboundMessage(input: {
+    conversationId: string;
+    body: string;
+    providerId: string;
+    rawPayload?: Prisma.InputJsonValue;
+  }) {
+    try {
+      await prisma.chatMessage.create({
+        data: {
+          ...input,
+          direction: "inbound",
+        },
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        return false;
+      }
+      throw error;
+    }
   }
 
   async updateConversation(input: {

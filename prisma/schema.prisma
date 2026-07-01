@@ -304,7 +304,7 @@ model ChatMessage {
   conversationId String           @db.Uuid
   direction      String
   body           String
-  providerId     String?
+  providerId     String?          @unique
   rawPayload     Json?
   readAt         DateTime?
   sentAt         DateTime?
