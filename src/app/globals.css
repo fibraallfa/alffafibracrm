@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 40% 98%;
+  --foreground: 213 74% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 213 74% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 213 74% 12%;
+  --primary: 201 100% 50%;
+  --primary-foreground: 213 74% 12%;
+  --secondary: 210 25% 94%;
+  --secondary-foreground: 213 74% 12%;
+  --muted: 210 25% 94%;
+  --muted-foreground: 213 20% 42%;
+  --accent: 199 100% 95%;
+  --accent-foreground: 213 74% 12%;
+  --destructive: 0 74% 52%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 213 28% 88%;
+  --input: 213 28% 88%;
+  --ring: 193 100% 52%;
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: 213 74% 8%;
+  --foreground: 210 40% 96%;
+  --card: 213 62% 12%;
+  --card-foreground: 210 40% 96%;
+  --popover: 213 62% 12%;
+  --popover-foreground: 210 40% 96%;
+  --primary: 193 100% 52%;
+  --primary-foreground: 213 74% 8%;
+  --secondary: 213 40% 18%;
+  --secondary-foreground: 210 40% 96%;
+  --muted: 213 40% 18%;
+  --muted-foreground: 212 18% 70%;
+  --accent: 213 52% 18%;
+  --accent-foreground: 210 40% 96%;
+  --destructive: 0 74% 52%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 213 34% 22%;
+  --input: 213 34% 22%;
+  --ring: 193 100% 52%;
+}
+
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
