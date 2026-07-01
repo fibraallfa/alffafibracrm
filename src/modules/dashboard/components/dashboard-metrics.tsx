@@ -9,6 +9,7 @@ export type DashboardMetricsData = {
   wonLeads: number;
   totalValue: number;
   expenses: number;
+  showExpenses?: boolean;
 };
 
 type MetricIcons = Record<"newLeads" | "wonLeads" | "totalValue" | "expenses", LucideIcon>;
@@ -26,8 +27,10 @@ const currency = new Intl.NumberFormat("pt-BR", {
 });
 
 export function DashboardMetrics({ data, loading }: { data: DashboardMetricsData | null; loading: boolean }) {
+  const showExpenses = data?.showExpenses ?? true;
+
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className={`grid gap-4 sm:grid-cols-2 ${showExpenses ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
       <MetricCard
         title="Leads Novos"
         value={loading ? "..." : String(data?.newLeads ?? 0)}
@@ -49,12 +52,14 @@ export function DashboardMetrics({ data, loading }: { data: DashboardMetricsData
         icon={icons.totalValue}
         href="/leads?status=WON"
       />
-      <MetricCard
-        title="Despesas"
-        value={loading ? "..." : currency.format(data?.expenses ?? 0)}
-        helper="A pagar"
-        icon={icons.expenses}
-      />
+      {showExpenses ? (
+        <MetricCard
+          title="Despesas"
+          value={loading ? "..." : currency.format(data?.expenses ?? 0)}
+          helper="A pagar"
+          icon={icons.expenses}
+        />
+      ) : null}
     </div>
   );
 }

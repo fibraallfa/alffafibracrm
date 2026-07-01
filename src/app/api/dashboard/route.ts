@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     const user = await requireCurrentUser();
     assertPermission(user, permissions.dashboardView);
     const { searchParams } = new URL(request.url);
-    const overview = await dashboardService.getOverview(parseDashboardFilters(searchParams));
+    const overview = await dashboardService.getOverview(parseDashboardFilters(searchParams), user);
     return NextResponse.json(successResponse("Dashboard consultada.", overview));
   } catch (error) {
     const authError = authErrorResponse(error);

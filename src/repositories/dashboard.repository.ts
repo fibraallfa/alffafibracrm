@@ -1,4 +1,4 @@
-import { LeadStatus, Prisma } from "@prisma/client";
+import { LeadStatus, Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export type DashboardFilters = {
@@ -7,22 +7,25 @@ export type DashboardFilters = {
 };
 
 export class DashboardRepository {
-  async getMetrics(filters: DashboardFilters = {}) {
+  async getMetrics(filters: DashboardFilters = {}, user?: Pick<User, "id" | "role">) {
     const chartDateFilter = buildDateFilter(filters);
-    const chartLeadWhere: Prisma.LeadWhereInput = { deletedAt: null, ...chartDateFilter };
+    const accessWhere = buildDashboardAccessWhere(user);
+    const chartLeadWhere: Prisma.LeadWhereInput = { deletedAt: null, ...accessWhere, ...chartDateFilter };
     const todayFilter = buildTodayFilter();
+    const wonWhere: Prisma.LeadWhereInput = { deletedAt: null, status: LeadStatus.WON, ...buildWonAccessWhere(user) };
+    const visibleLeadWhere: Prisma.LeadWhereInput = { deletedAt: null, ...accessWhere };
 
     const [newLeads, expenses, leadStatuses, wonLeadRows, chartLeads, recentLeads] =
       await Promise.all([
-      prisma.lead.count({ where: { deletedAt: null, createdAt: todayFilter } }),
-      getOpenExpensesTotal(),
+      prisma.lead.count({ where: { deletedAt: null, createdAt: todayFilter, ...accessWhere } }),
+      user?.role === "EMPLOYEE" ? Promise.resolve(0) : getOpenExpensesTotal(),
       prisma.lead.groupBy({
         by: ["status"],
-        where: { deletedAt: null },
+        where: visibleLeadWhere,
         _count: { status: true },
       }),
       prisma.lead.findMany({
-        where: { deletedAt: null, status: LeadStatus.WON },
+        where: wonWhere,
         include: { plan: true },
       }),
       prisma.lead.findMany({
@@ -31,7 +34,7 @@ export class DashboardRepository {
         orderBy: { createdAt: "asc" },
       }),
       prisma.lead.findMany({
-        where: { deletedAt: null },
+        where: visibleLeadWhere,
         orderBy: { createdAt: "desc" },
         take: 6,
         include: { plan: true, assignedUser: true },
@@ -61,6 +64,7 @@ export class DashboardRepository {
       wonLeads,
       totalValue: wonValue,
       expenses,
+      showExpenses: user?.role !== "EMPLOYEE",
       leadStatuses: leadStatuses.map((item) => ({
         status: item.status,
         count: item._count.status,
@@ -85,6 +89,27 @@ export class DashboardRepository {
 
 function getLeadValue(lead: { planValue?: unknown; expectedValue: unknown; plan?: { price: unknown } | null }) {
   return Number(lead.planValue ?? lead.expectedValue ?? lead.plan?.price ?? 0);
+}
+
+function buildDashboardAccessWhere(user?: Pick<User, "id" | "role">): Prisma.LeadWhereInput {
+  if (user?.role !== "EMPLOYEE") {
+    return {};
+  }
+
+  return { assignedUserId: user.id };
+}
+
+function buildWonAccessWhere(user?: Pick<User, "id" | "role">): Prisma.LeadWhereInput {
+  if (user?.role !== "EMPLOYEE") {
+    return {};
+  }
+
+  return {
+    OR: [
+      { closedByUserId: user.id },
+      { closedByUserId: null, assignedUserId: user.id },
+    ],
+  };
 }
 
 async function getOpenExpensesTotal() {

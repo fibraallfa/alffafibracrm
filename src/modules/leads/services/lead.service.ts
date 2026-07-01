@@ -27,7 +27,7 @@ export class LeadService {
     });
   }
 
-  async update(id: string, input: UpdateLeadInput) {
+  async update(id: string, input: UpdateLeadInput, actorUserId?: string) {
     const parsed = updateLeadSchema.parse(input);
     return this.leadRepository.update(id, {
       ...parsed,
@@ -37,7 +37,7 @@ export class LeadService {
       kanbanStageId: parsed.kanbanStageId || undefined,
       assignedUserId: parsed.assignedUserId || undefined,
       billingDueDay: parsed.billingDueDay || undefined,
-    });
+    }, actorUserId);
   }
 
   async delete(id: string) {

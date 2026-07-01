@@ -41,7 +41,7 @@ export async function PUT(request: Request, context: RouteContext) {
     if (!currentLead) {
       return NextResponse.json(errorResponse("Lead nao encontrado.", "NOT_FOUND"), { status: 404 });
     }
-    const lead = await leadService.update(id, body);
+    const lead = await leadService.update(id, body, user.id);
     await logAudit({
       userId: user.id,
       action: "UPDATE",

@@ -50,9 +50,9 @@ export class LeadRepository {
     });
   }
 
-  async update(id: string, data: UpdateLeadInput) {
+  async update(id: string, data: UpdateLeadInput, actorUserId?: string) {
     const normalized = await normalizeLeadData(data);
-    const current = await prisma.lead.findUnique({ where: { id }, select: { status: true, wonAt: true } });
+    const current = await prisma.lead.findUnique({ where: { id }, select: { status: true, wonAt: true, closedByUserId: true } });
     const stage = normalized.kanbanStageId
       ? await prisma.leadKanbanStage.findFirst({
           where: { id: normalized.kanbanStageId, active: true, deletedAt: null },
@@ -64,7 +64,9 @@ export class LeadRepository {
       ...normalized,
       ...(stage ? { status: stage.status } : {}),
       ...(status === "WON" && !current?.wonAt ? { wonAt: new Date() } : {}),
+      ...(status === "WON" && actorUserId && !current?.closedByUserId ? { closedByUserId: actorUserId } : {}),
       ...(status && status !== "WON" ? { wonAt: null } : {}),
+      ...(status && status !== "WON" ? { closedByUserId: null } : {}),
     };
 
     return prisma.lead.update({
