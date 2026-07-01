@@ -30,10 +30,10 @@ const prisma = new PrismaClient();
 
 const plans = [
   {
-    name: "Plano 250Mb",
-    speed: "250Mb",
-    price: 89.9,
-    description: "Plano 250Mb + Globoplay",
+    name: "Plano 350Mb",
+    speed: "350Mb",
+    price: 99.9,
+    description: "Plano 350Mb + Globoplay",
     order: 1,
   },
   {
@@ -73,7 +73,7 @@ const plans = [
   },
 ];
 
-const legacyPlanNames = ["ALFFA Start", "ALFFA Plus", "ALFFA Ultra"];
+const legacyPlanNames = ["ALFFA Start", "ALFFA Plus", "ALFFA Ultra", "Plano 250Mb"];
 
 async function main() {
   await prisma.plan.updateMany({

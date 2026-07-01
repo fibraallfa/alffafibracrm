@@ -141,7 +141,7 @@ async function main() {
       active: true,
       name: {
         in: [
-          "Plano 250Mb",
+          "Plano 350Mb",
           "Plano 500Mb",
           "Plano 1Gb",
           "Plano 250Mb + Chip",
