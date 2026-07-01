@@ -5,8 +5,21 @@ export class ChatbotRepository {
   async findMessageByProviderId(providerId: string) {
     return prisma.chatMessage.findFirst({
       where: { providerId },
-      select: { id: true, conversationId: true },
+      select: { id: true, conversationId: true, createdAt: true },
     });
+  }
+
+  async hasOutboundResponseAfter(conversationId: string, receivedAt: Date) {
+    const response = await prisma.chatMessage.findFirst({
+      where: {
+        conversationId,
+        direction: "outbound",
+        createdAt: { gte: receivedAt },
+      },
+      select: { id: true },
+    });
+
+    return Boolean(response);
   }
 
   async findOrCreateConversation(phone: string, agentId?: string) {

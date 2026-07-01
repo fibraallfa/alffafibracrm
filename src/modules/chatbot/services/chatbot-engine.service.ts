@@ -27,24 +27,34 @@ export class ChatbotEngineService {
     instanceId?: string;
   }) {
     const phone = normalizeWhatsappPhone(input.phone);
+    let alreadyReceived = false;
 
     if (input.providerId) {
       const existingMessage = await this.chatbotRepository.findMessageByProviderId(input.providerId);
       if (existingMessage) {
-        return { state: "DUPLICATED", replied: false, delayMs: 0 };
+        const alreadyReplied = await this.chatbotRepository.hasOutboundResponseAfter(
+          existingMessage.conversationId,
+          existingMessage.createdAt,
+        );
+        if (alreadyReplied) {
+          return { state: "DUPLICATED", replied: false, delayMs: 0 };
+        }
+        alreadyReceived = true;
       }
     }
 
     const agent = await this.chatbotRepository.getAgentByInstance(input.instanceId);
     const conversation = await this.chatbotRepository.findOrCreateConversation(phone, agent?.id);
 
-    await this.chatbotRepository.saveMessage({
-      conversationId: conversation.id,
-      direction: "inbound",
-      body: input.message,
-      providerId: input.providerId,
-      rawPayload: input.rawPayload ?? {},
-    });
+    if (!alreadyReceived) {
+      await this.chatbotRepository.saveMessage({
+        conversationId: conversation.id,
+        direction: "inbound",
+        body: input.message,
+        providerId: input.providerId,
+        rawPayload: input.rawPayload ?? {},
+      });
+    }
 
     if (input.providerId) {
       await this.zapiService.markAsRead(input.providerId, phone, agentConfig(agent));
@@ -60,16 +70,16 @@ export class ChatbotEngineService {
 
     const minTyping = agent?.minTypingSeconds ?? 2;
     const maxTyping = agent?.maxTypingSeconds ?? 4;
-    const delayMs = randomDelay(minTyping, maxTyping);
+    const delaySeconds = randomDelaySeconds(minTyping, maxTyping);
+    const typingEnabled =
+      (agent?.enableReplyDelay ?? true) && (agent?.enableTyping ?? true);
 
-    if (agent?.enableReplyDelay ?? true) {
-      if (agent?.enableTyping ?? true) {
-        await this.zapiService.startTyping(phone, agentConfig(agent));
-      }
-      await wait(delayMs);
-    }
-
-    await this.zapiService.sendText({ phone, message: next.reply, config: agentConfig(agent) });
+    await this.zapiService.sendText({
+      phone,
+      message: next.reply,
+      delayTypingSeconds: typingEnabled ? delaySeconds : undefined,
+      config: agentConfig(agent),
+    });
     await this.chatbotRepository.saveMessage({
       conversationId: conversation.id,
       direction: "outbound",
@@ -82,7 +92,7 @@ export class ChatbotEngineService {
       leadId: next.leadId,
     });
 
-    return { state: next.state, replied: true, delayMs };
+    return { state: next.state, replied: true, delayMs: typingEnabled ? delaySeconds * 1000 : 0 };
   }
 
   private async nextResponse(input: {
@@ -629,14 +639,10 @@ function normalizeMemory(memory: unknown): ChatMemory {
   return {};
 }
 
-function randomDelay(minSeconds: number, maxSeconds: number) {
+function randomDelaySeconds(minSeconds: number, maxSeconds: number) {
   const min = Math.max(0, minSeconds);
   const max = Math.max(min + 1, maxSeconds);
-  return Math.floor((Math.random() * (max - min) + min) * 1000);
-}
-
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return Math.max(1, Math.floor(Math.random() * (max - min) + min));
 }
 
 function normalizeWhatsappPhone(phone: string) {

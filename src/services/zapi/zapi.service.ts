@@ -4,6 +4,7 @@ import { writeTechnicalLog } from "@/lib/logger";
 type SendTextInput = {
   phone: string;
   message: string;
+  delayTypingSeconds?: number;
   config?: Partial<ZapiConfig>;
 };
 
@@ -14,42 +15,57 @@ export class ZapiService {
     return this.optionalPost("read-message", { messageId, phone }, config);
   }
 
-  async startTyping(phone: string, config?: Partial<ZapiConfig>) {
-    return this.optionalPost("typing", { phone }, config);
-  }
-
-  async sendText({ phone, message, config }: SendTextInput) {
+  async sendText({ phone, message, delayTypingSeconds, config }: SendTextInput) {
     const zapiConfig = { ...(await getZapiRuntimeConfig()), ...cleanConfig(config) };
     if (!zapiConfig.instanceId || !zapiConfig.token) {
       throw new Error("Z-API nao configurada.");
     }
 
-    const response = await fetch(
-      `${zapiConfig.baseUrl}/instances/${zapiConfig.instanceId}/token/${zapiConfig.token}/send-text`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(zapiConfig.clientToken ? { "Client-Token": zapiConfig.clientToken } : {}),
-        },
-        body: JSON.stringify({ phone, message }),
-      },
-    );
+    const endpoint = `${zapiConfig.baseUrl}/instances/${zapiConfig.instanceId}/token/${zapiConfig.token}/send-text`;
+    const body = {
+      phone,
+      message,
+      ...(delayTypingSeconds
+        ? { delayTyping: Math.min(15, Math.max(1, Math.round(delayTypingSeconds))) }
+        : {}),
+    };
 
-    if (!response.ok) {
-      await writeTechnicalLog({
-        level: "ERROR",
-        category: "integration",
-        message: "Falha ao enviar mensagem pela Z-API.",
-        method: "POST",
-        endpoint: "send-text",
-        statusCode: response.status,
-        integration: "zapi",
-      });
-      throw new Error("Falha ao enviar mensagem pela Z-API.");
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(zapiConfig.clientToken ? { "Client-Token": zapiConfig.clientToken } : {}),
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(20_000),
+        });
+
+        if (response.ok) {
+          return response.json() as Promise<unknown>;
+        }
+
+        await writeTechnicalLog({
+          level: "ERROR",
+          category: "integration",
+          message: `Falha ao enviar mensagem pela Z-API (tentativa ${attempt}).`,
+          method: "POST",
+          endpoint: "send-text",
+          statusCode: response.status,
+          integration: "zapi",
+        });
+
+        if (response.status < 500 || attempt === 2) {
+          throw new Error("Falha ao enviar mensagem pela Z-API.");
+        }
+      } catch (error) {
+        if (attempt === 2) throw error;
+        await wait(500);
+      }
     }
 
-    return response.json() as Promise<unknown>;
+    throw new Error("Falha ao enviar mensagem pela Z-API.");
   }
 
   private async optionalPost(action: string, body: Record<string, string>, config?: Partial<ZapiConfig>) {
@@ -80,4 +96,8 @@ export class ZapiService {
 
 function cleanConfig(config?: Partial<ZapiConfig>) {
   return Object.fromEntries(Object.entries(config ?? {}).filter(([, value]) => Boolean(value))) as Partial<ZapiConfig>;
+}
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
