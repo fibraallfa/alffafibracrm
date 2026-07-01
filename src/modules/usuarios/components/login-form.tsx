@@ -9,10 +9,8 @@ import { navigationItems } from "@/config/navigation";
 import type { ApiResult } from "@/types/api";
 
 type LoginResult = {
-  user?: {
-    role?: "ADMIN" | "EMPLOYEE";
-    permissions?: Record<string, boolean> | null;
-  };
+  role?: "ADMIN" | "EMPLOYEE";
+  permissions?: Record<string, boolean> | null;
 };
 
 export function LoginForm() {
@@ -39,7 +37,7 @@ export function LoginForm() {
     const result = (await response.json()) as ApiResult<LoginResult>;
 
     if (result.status === "success") {
-      router.replace(searchParams.get("redirect") ?? getStartPath(result.data?.user));
+      router.replace(searchParams.get("redirect") ?? getStartPath(result.data));
       router.refresh();
       return;
     }
@@ -92,7 +90,7 @@ export function LoginForm() {
   );
 }
 
-function getStartPath(user?: LoginResult["user"]) {
+function getStartPath(user?: LoginResult) {
   if (user?.role === "ADMIN") {
     return "/dashboard";
   }
