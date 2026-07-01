@@ -5,7 +5,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { navigationItems } from "@/config/navigation";
 import type { ApiResult } from "@/types/api";
+
+type LoginResult = {
+  user?: {
+    role?: "ADMIN" | "EMPLOYEE";
+    permissions?: Record<string, boolean> | null;
+  };
+};
 
 export function LoginForm() {
   const router = useRouter();
@@ -28,10 +36,10 @@ export function LoginForm() {
         password: formData.get("password"),
       }),
     });
-    const result = (await response.json()) as ApiResult<unknown>;
+    const result = (await response.json()) as ApiResult<LoginResult>;
 
     if (result.status === "success") {
-      router.replace(searchParams.get("redirect") ?? "/dashboard");
+      router.replace(searchParams.get("redirect") ?? getStartPath(result.data?.user));
       router.refresh();
       return;
     }
@@ -82,4 +90,18 @@ export function LoginForm() {
       </Button>
     </form>
   );
+}
+
+function getStartPath(user?: LoginResult["user"]) {
+  if (user?.role === "ADMIN") {
+    return "/dashboard";
+  }
+
+  const item = navigationItems.find((navigationItem) => {
+    if ("adminOnly" in navigationItem && navigationItem.adminOnly) return false;
+    if ("employeeVisible" in navigationItem && navigationItem.employeeVisible) return true;
+    return Boolean(user?.permissions?.[navigationItem.permission]);
+  });
+
+  return item?.href ?? "/configuracoes";
 }
