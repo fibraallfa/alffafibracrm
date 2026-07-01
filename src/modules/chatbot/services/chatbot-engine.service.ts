@@ -137,7 +137,20 @@ export class ChatbotEngineService {
       };
     }
 
-    if (asksForPlanList(text)) {
+    if (asksForPlanRecommendation(text)) {
+      const plans = await this.getPlans(input.agent);
+      const recommended = findRecommendedPlan(plans);
+      const recommendation = recommended
+        ? `Para essa necessidade, recomendo o ${recommended.name} por ${formatMoney(Number(recommended.price))} + Globoplay. É a opção mais completa entre os planos disponíveis. 😊`
+        : "No momento não há planos ativos vinculados a este atendimento.";
+      return {
+        state: input.state,
+        memory,
+        reply: `${recommendation}\n\n${promptForState(input.state, firstName)}`,
+      };
+    }
+
+    if (asksForPlanList(text) || isPlanQuestion(text)) {
       const plans = await this.getPlans(input.agent);
       return {
         state: input.state,
@@ -866,10 +879,10 @@ function formatPlanList(plans: PlanCandidate[]) {
 }
 
 function findRecommendedPlan(plans: PlanCandidate[]) {
-  return (
-    plans.find((plan) => normalizeText(plan.name).includes("500mb") && normalizeText(plan.name).includes("chip")) ??
-    plans.find((plan) => normalizeText(plan.name).includes("500mb")) ??
-    plans[0]
+  return plans.reduce<PlanCandidate | undefined>(
+    (mostExpensive, plan) =>
+      !mostExpensive || Number(plan.price) > Number(mostExpensive.price) ? plan : mostExpensive,
+    undefined,
   );
 }
 
@@ -980,6 +993,21 @@ function promptForState(state: string, firstName?: string) {
 function asksForPlanList(text: string) {
   const normalized = normalizeText(text);
   return ["ver os planos", "quero ver", "opcoes", "opcoes disponiveis", "quais planos", "outros planos"].some((term) => normalized.includes(term));
+}
+
+function asksForPlanRecommendation(text: string) {
+  const normalized = normalizeText(text);
+  const mentionsPlan = /\b(plano|internet|fibra|mega|giga|velocidade)\b/.test(normalized);
+  const requestsRecommendation = [
+    "melhor", "recomenda", "recomende", "recomendacao", "indica", "indique", "ideal",
+    "para jogar", "para jogos", "para trabalhar", "para estudar", "mais rapido", "mais completa",
+  ].some((term) => normalized.includes(term));
+  return mentionsPlan && requestsRecommendation;
+}
+
+function isPlanQuestion(text: string) {
+  const normalized = normalizeText(text);
+  return /\b(plano|planos|internet|fibra|mega|megas|giga|chip)\b/.test(normalized) && looksLikeQuestion(text);
 }
 
 function isAlternativeRequest(text: string) {
