@@ -9,6 +9,13 @@ export class PlanRepository {
     });
   }
 
+  async findActive() {
+    return prisma.plan.findMany({
+      where: { deletedAt: null, active: true },
+      orderBy: [{ order: "asc" }, { createdAt: "desc" }],
+    });
+  }
+
   async create(data: CreatePlanInput) {
     return prisma.plan.create({ data: { ...data, speed: data.speed ?? "" } });
   }

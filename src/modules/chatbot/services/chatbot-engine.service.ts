@@ -412,7 +412,14 @@ export class ChatbotEngineService {
   }
 
   private async getPlans(agent: Awaited<ReturnType<ChatbotRepository["getAgentByInstance"]>>) {
-    return agent?.plans.length ? agent.plans : this.chatbotRepository.listActivePlans(agent?.id);
+    const activePlans = await this.chatbotRepository.listActivePlans();
+    const merged = new Map<string, PlanCandidate>();
+
+    for (const plan of [...(agent?.plans ?? []), ...activePlans]) {
+      merged.set(plan.id, plan);
+    }
+
+    return Array.from(merged.values());
   }
 
   private selectPlanAndConfirm(input: { memory: ChatMemory; plan: PlanCandidate }): NextBotResponse {

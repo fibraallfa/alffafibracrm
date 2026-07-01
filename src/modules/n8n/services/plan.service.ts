@@ -9,6 +9,10 @@ export class PlanService {
     return this.planRepository.findMany();
   }
 
+  async listActive() {
+    return this.planRepository.findActive();
+  }
+
   async create(input: CreatePlanInput) {
     const parsed = createPlanSchema.parse(input);
     return this.planRepository.create(parsed);
