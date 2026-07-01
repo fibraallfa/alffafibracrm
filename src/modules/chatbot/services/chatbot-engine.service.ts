@@ -114,13 +114,17 @@ export class ChatbotEngineService {
     const text = input.message.trim();
     const memory = { ...input.memory };
     const firstName = getFirstName(memory.name);
-    const messageFor = (state: string, fallback: string) => interpolate(flowMessage(input.agent?.flow, state, fallback), memory);
+    const messageFor = (state: string, fallback: string) => interpolate(
+      flowMessage(input.agent?.flow, state, fallback),
+      memory,
+      input.agent?.name,
+    );
 
     if (isRestartRequest(text)) {
       return {
         state: "ASK_CEP",
         memory: {},
-        reply: messageFor("START", "Olá 👋! Eu sou o Cris, atendente virtual da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?"),
+        reply: messageFor("START", `Olá 👋! Eu sou o ${input.agent?.name ?? "Cris"}, atendente virtual da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?`),
       };
     }
 
@@ -160,7 +164,7 @@ export class ChatbotEngineService {
       return {
         state: "ASK_CEP",
         memory,
-        reply: messageFor("START", "Olá 👋! Eu sou o Cris, atendente virtual da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?"),
+        reply: messageFor("START", `Olá 👋! Eu sou o ${input.agent?.name ?? "Cris"}, atendente virtual da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?`),
       };
     }
 
@@ -435,19 +439,13 @@ export class ChatbotEngineService {
     return {
       state: "ASK_CEP",
       memory: {},
-      reply: messageFor("START", "Olá 👋! Eu sou o Cris, atendente virtual da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?"),
+      reply: messageFor("START", `Olá 👋! Eu sou o ${input.agent?.name ?? "Cris"}, atendente virtual da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?`),
     };
   }
 
   private async getPlans(agent: Awaited<ReturnType<ChatbotRepository["getAgentByInstance"]>>) {
-    const activePlans = await this.chatbotRepository.listActivePlans();
-    const merged = new Map<string, PlanCandidate>();
-
-    for (const plan of [...(agent?.plans ?? []), ...activePlans]) {
-      merged.set(plan.id, plan);
-    }
-
-    return Array.from(merged.values());
+    if (!agent) return this.chatbotRepository.listActivePlans();
+    return this.chatbotRepository.listActivePlans(agent.id);
   }
 
   private selectPlanAndConfirm(input: { memory: ChatMemory; plan: PlanCandidate }): NextBotResponse {
@@ -1017,8 +1015,9 @@ function toTitleCase(value: string) {
     .join(" ");
 }
 
-function interpolate(template: string, memory: ChatMemory) {
+function interpolate(template: string, memory: ChatMemory, agentName?: string) {
   return template
+    .replaceAll("{{agente}}", agentName || "Cris")
     .replaceAll("{{nome}}", getFirstName(memory.name) || "cliente")
     .replaceAll("{{cep}}", formatCep(memory.cep))
     .replaceAll("{{endereco}}", formatFullAddress(memory));

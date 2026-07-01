@@ -23,7 +23,7 @@ type AgentItem = {
 type Tab = "agents" | "plans" | "openai" | "flow";
 
 const defaultSteps: FlowStep[] = [
-  { id: "start", state: "START", title: "Entrada Meta Ads", message: "Olá 👋! Eu sou o Cris, atendente virtual da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?" },
+  { id: "start", state: "START", title: "Entrada Meta Ads", message: "Olá 👋! Eu sou o {{agente}}, atendente virtual da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?" },
   { id: "cep", state: "ASK_CEP", title: "Consultar cobertura", message: "Validar o CEP na base do CRM. Se houver viabilidade, confirmar endereço e pedir nome completo. Se não houver, informar indisponibilidade e finalizar." },
   { id: "name", state: "ASK_NAME", title: "Nome completo", message: "Boa notícia 🎉! Temos viabilidade no CEP {{cep}}, localizado {{endereco}}. Consigo te atender com a Claro 🚀. Para seguir com a contratação, preciso coletar alguns dados seus. Qual é o seu nome completo?" },
   { id: "document", state: "ASK_DOCUMENT", title: "CPF ou CNPJ", message: "Ótimo, {{nome}}! 😊 Agora, por favor, me informe o seu CPF ou CNPJ." },
