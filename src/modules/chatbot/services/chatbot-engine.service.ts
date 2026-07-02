@@ -146,7 +146,7 @@ export class ChatbotEngineService {
       return {
         state: input.state,
         memory,
-        reply: `Recebi o arquivo, mas não consegui identificar com segurança o dado necessário. Envie uma foto nítida, sem cortes e com boa iluminação, por favor. 😊\n\n${promptForState(input.state, firstName)}`,
+        reply: `Recebi o arquivo ou áudio, mas não consegui identificar com segurança o dado necessário. Envie novamente com boa qualidade ou escreva a informação, por favor. 😊\n\n${promptForState(input.state, firstName)}`,
       };
     }
 

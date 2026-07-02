@@ -48,6 +48,31 @@ export class OpenAiService {
 
     return parseExtractedCustomerData(response.output_text);
   }
+
+  async transcribeAudio(input: { url: string; mimeType: string }) {
+    const config = await getOpenAiRuntimeConfig();
+    if (!config.apiKey) return "";
+
+    const mediaResponse = await fetch(input.url, { signal: AbortSignal.timeout(12_000) });
+    if (!mediaResponse.ok) throw new Error("Não foi possível baixar o áudio recebido.");
+    const declaredSize = Number(mediaResponse.headers.get("content-length") ?? 0);
+    if (declaredSize > 20 * 1024 * 1024) throw new Error("Áudio excede o limite de 20 MB.");
+
+    const bytes = await mediaResponse.arrayBuffer();
+    if (bytes.byteLength > 20 * 1024 * 1024) throw new Error("Áudio excede o limite de 20 MB.");
+    const mimeType = input.mimeType.split(";")[0] || "audio/ogg";
+    const extension = audioExtension(mimeType);
+    const file = new File([bytes], `audio.${extension}`, { type: mimeType });
+    const client = new OpenAI({ apiKey: config.apiKey, timeout: 25_000, maxRetries: 0 });
+    const transcription = await client.audio.transcriptions.create({
+      file,
+      model: process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe",
+      language: "pt",
+      prompt: "Atendimento comercial brasileiro de internet Claro. Preserve nomes, números, CEP, CPF, e-mail e datas falados.",
+    });
+
+    return transcription.text.trim();
+  }
 }
 
 export type ExtractedCustomerData = {
@@ -84,4 +109,15 @@ function parseExtractedCustomerData(value: string): ExtractedCustomerData {
 function digitsWithLength(value: string | undefined, length: number) {
   const digits = value?.replace(/\D/g, "");
   return digits?.length === length ? digits : undefined;
+}
+
+function audioExtension(mimeType: string) {
+  const extensions: Record<string, string> = {
+    "audio/ogg": "ogg",
+    "audio/mpeg": "mp3",
+    "audio/mp4": "m4a",
+    "audio/wav": "wav",
+    "audio/webm": "webm",
+  };
+  return extensions[mimeType] ?? "ogg";
 }

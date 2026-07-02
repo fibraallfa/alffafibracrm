@@ -29,6 +29,7 @@ type ZapiWebhookPayload = {
   };
   image?: { mimeType?: string; imageUrl?: string; caption?: string; downloadError?: string | null };
   document?: { documentUrl?: string; mimeType?: string; fileName?: string; pageCount?: number };
+  audio?: { audioUrl?: string; mimeType?: string; seconds?: number; ptt?: boolean; viewOnce?: boolean };
   location?: { longitude?: number; latitude?: number; address?: string; url?: string };
 };
 
@@ -96,6 +97,19 @@ async function extractIncomingMessage(payload: ZapiWebhookPayload) {
     ""
   ).trim();
   if (text) return { message: text };
+
+  if (payload.audio?.audioUrl) {
+    try {
+      const transcription = await openAiService.transcribeAudio({
+        url: payload.audio.audioUrl,
+        mimeType: payload.audio.mimeType ?? "audio/ogg",
+      });
+      if (transcription) return { message: transcription };
+    } catch {
+      // The flow below keeps the current step and asks the customer to resend.
+    }
+    return { message: "[Áudio não pôde ser transcrito]", extractedData: {} };
+  }
 
   const media = payload.image?.imageUrl
     ? { url: payload.image.imageUrl, mimeType: payload.image.mimeType ?? "image/jpeg", label: "Imagem" }
