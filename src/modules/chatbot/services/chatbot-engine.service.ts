@@ -894,6 +894,9 @@ function formatPlanList(plans: PlanCandidate[]) {
 }
 
 function findRecommendedPlan(plans: PlanCandidate[]) {
+  const comboHexa = plans.find((plan) => normalizeText(plan.name).includes("combo hexa"));
+  if (comboHexa) return comboHexa;
+
   return plans.reduce<PlanCandidate | undefined>(
     (mostExpensive, plan) =>
       !mostExpensive || Number(plan.price) > Number(mostExpensive.price) ? plan : mostExpensive,
@@ -903,6 +906,17 @@ function findRecommendedPlan(plans: PlanCandidate[]) {
 
 function selectPlan(text: string, plans: PlanCandidate[]) {
   const normalized = normalizeText(text);
+  const comboHexa = plans.find((plan) => normalizeText(plan.name).includes("combo hexa"));
+  if (
+    comboHexa &&
+    (normalized.includes("combo hexa") ||
+      normalized === "hexa" ||
+      (normalized.includes("600") && (normalized.includes("chip") || normalized.includes("celular"))) ||
+      normalized.includes("139 80"))
+  ) {
+    return comboHexa;
+  }
+
   const byName = plans.find((plan) => {
     const name = normalizeText(plan.name);
     const speed = normalizeText(plan.speed);

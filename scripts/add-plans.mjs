@@ -58,10 +58,10 @@ const plans = [
     order: 4,
   },
   {
-    name: "Plano 500Mb + Chip",
-    speed: "500Mb + Chip",
+    name: "Combo Hexa - 600 (Wi-Fi 600Mb + 35Gb celular)",
+    speed: "600Mb + 35Gb celular",
     price: 139.8,
-    description: "Plano 500Mb + Chip + Globoplay (GRÁTIS)",
+    description: "Wi-Fi 600Mb + 35Gb celular + Globoplay (GRÁTIS)",
     order: 5,
   },
   {
@@ -73,7 +73,7 @@ const plans = [
   },
 ];
 
-const legacyPlanNames = ["ALFFA Start", "ALFFA Plus", "ALFFA Ultra", "Plano 250Mb"];
+const legacyPlanNames = ["ALFFA Start", "ALFFA Plus", "ALFFA Ultra", "Plano 250Mb", "Plano 500Mb + Chip"];
 
 async function main() {
   await prisma.plan.updateMany({

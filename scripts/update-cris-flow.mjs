@@ -145,7 +145,7 @@ async function main() {
           "Plano 500Mb",
           "Plano 1Gb",
           "Plano 250Mb + Chip",
-          "Plano 500Mb + Chip",
+          "Combo Hexa - 600 (Wi-Fi 600Mb + 35Gb celular)",
           "Plano 1Gb + Chip",
         ],
       },
