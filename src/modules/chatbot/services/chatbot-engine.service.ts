@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { CepRepository } from "@/repositories/cep.repository";
 import { ChatbotRepository } from "@/repositories/chatbot.repository";
 import { OpenAiService } from "@/services/openai/openai.service";
+import type { ExtractedCustomerData } from "@/services/openai/openai.service";
 import { ZapiService } from "@/services/zapi/zapi.service";
 import { onlyDigits } from "@/utils/mask";
 
@@ -25,6 +26,7 @@ export class ChatbotEngineService {
     providerId?: string;
     rawPayload?: Prisma.InputJsonValue;
     instanceId?: string;
+    extractedData?: ExtractedCustomerData;
   }) {
     const phone = normalizeWhatsappPhone(input.phone);
     let alreadyReceived = false;
@@ -75,6 +77,7 @@ export class ChatbotEngineService {
       state: conversation.state,
       memory: normalizeMemory(conversation.memory),
       agent,
+      extractedData: input.extractedData,
     });
 
     const minTyping = agent?.minTypingSeconds ?? 2;
@@ -110,8 +113,10 @@ export class ChatbotEngineService {
     state: string;
     memory: ChatMemory;
     agent: Awaited<ReturnType<ChatbotRepository["getAgentByInstance"]>>;
+    extractedData?: ExtractedCustomerData;
   }): Promise<NextBotResponse> {
-    const text = input.message.trim();
+    const originalText = input.message.trim();
+    const text = extractedValueForState(input.state, input.extractedData) ?? originalText;
     const memory = { ...input.memory };
     const firstName = getFirstName(memory.name);
     const messageFor = (state: string, fallback: string) => interpolate(
@@ -134,6 +139,14 @@ export class ChatbotEngineService {
         state: "HUMAN_HANDOFF",
         memory,
         reply: "Combinado, vou sinalizar para um consultor humano continuar seu atendimento por aqui. 😊",
+      };
+    }
+
+    if (input.extractedData && text === originalText) {
+      return {
+        state: input.state,
+        memory,
+        reply: `Recebi o arquivo, mas não consegui identificar com segurança o dado necessário. Envie uma foto nítida, sem cortes e com boa iluminação, por favor. 😊\n\n${promptForState(input.state, firstName)}`,
       };
     }
 
@@ -988,6 +1001,19 @@ function promptForState(state: string, firstName?: string) {
     CHOOSE_PLAN: "Qual plano você gostaria de escolher?",
   };
   return prompts[state] ?? "Me envie a próxima informação para continuarmos.";
+}
+
+function extractedValueForState(state: string, data?: ExtractedCustomerData) {
+  if (!data) return undefined;
+  const values: Record<string, string | undefined> = {
+    ASK_CEP: data.cep,
+    ASK_NAME: data.fullName,
+    ASK_DOCUMENT: data.cpf,
+    ASK_BIRTH_DATE: data.birthDate,
+    ASK_STREET_NUMBER: data.streetNumber,
+    ASK_EMAIL: data.email,
+  };
+  return values[state];
 }
 
 function asksForPlanList(text: string) {

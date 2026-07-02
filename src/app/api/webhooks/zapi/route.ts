@@ -4,8 +4,10 @@ import { errorResponse, successResponse } from "@/lib/api-response";
 import { writeTechnicalLog } from "@/lib/logger";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { ChatbotEngineService } from "@/modules/chatbot/services/chatbot-engine.service";
+import { OpenAiService, type ExtractedCustomerData } from "@/services/openai/openai.service";
 
 const chatbotEngineService = new ChatbotEngineService();
+const openAiService = new OpenAiService();
 
 type ZapiWebhookPayload = {
   instanceId?: string;
@@ -13,6 +15,7 @@ type ZapiWebhookPayload = {
   sender?: string;
   from?: string;
   fromMe?: boolean;
+  isGroup?: boolean;
   messageId?: string;
   id?: string;
   body?: string;
@@ -24,6 +27,9 @@ type ZapiWebhookPayload = {
     message?: string;
     body?: string;
   };
+  image?: { mimeType?: string; imageUrl?: string; caption?: string; downloadError?: string | null };
+  document?: { documentUrl?: string; mimeType?: string; fileName?: string; pageCount?: number };
+  location?: { longitude?: number; latitude?: number; address?: string; url?: string };
 };
 
 export async function POST(request: Request) {
@@ -38,15 +44,15 @@ export async function POST(request: Request) {
       });
     }
 
-    if (payload.fromMe) {
+    if (payload.fromMe || payload.isGroup) {
       return NextResponse.json(successResponse("Mensagem propria ignorada.", { ignored: true }));
     }
 
     const phone = payload.phone ?? payload.sender ?? payload.from;
-    const message = extractMessage(payload);
+    const incoming = await extractIncomingMessage(payload);
     const providerId = payload.messageId ?? payload.id;
 
-    if (!phone || !message) {
+    if (!phone || !incoming.message) {
       return NextResponse.json(errorResponse("Payload invalido.", "INVALID_WEBHOOK"), {
         status: 400,
       });
@@ -54,10 +60,11 @@ export async function POST(request: Request) {
 
     const result = await chatbotEngineService.processIncomingMessage({
       phone,
-      message,
+      message: incoming.message,
       providerId,
       rawPayload: payload as Prisma.InputJsonValue,
       instanceId: payload.instanceId,
+      extractedData: incoming.extractedData,
     });
 
     return NextResponse.json(successResponse("Webhook processado.", result));
@@ -79,8 +86,8 @@ export async function POST(request: Request) {
   }
 }
 
-function extractMessage(payload: ZapiWebhookPayload) {
-  return (
+async function extractIncomingMessage(payload: ZapiWebhookPayload) {
+  const text = (
     payload.text?.message ??
     payload.text?.body ??
     payload.message?.text ??
@@ -88,4 +95,52 @@ function extractMessage(payload: ZapiWebhookPayload) {
     payload.body ??
     ""
   ).trim();
+  if (text) return { message: text };
+
+  const media = payload.image?.imageUrl
+    ? { url: payload.image.imageUrl, mimeType: payload.image.mimeType ?? "image/jpeg", label: "Imagem" }
+    : payload.document?.documentUrl && payload.document.mimeType === "application/pdf"
+      ? { url: payload.document.documentUrl, mimeType: payload.document.mimeType, label: "PDF" }
+      : null;
+
+  if (media) {
+    try {
+      const extractedData = await openAiService.extractCustomerData(media);
+      return { message: `[${media.label} recebido]`, extractedData };
+    } catch {
+      return { message: `[${media.label} não pôde ser lido]`, extractedData: {} };
+    }
+  }
+
+  if (payload.location && Number.isFinite(payload.location.latitude) && Number.isFinite(payload.location.longitude)) {
+    const extractedData = await extractLocationData(payload.location);
+    return { message: "[Localização recebida]", extractedData };
+  }
+
+  return { message: "" };
+}
+
+async function extractLocationData(location: NonNullable<ZapiWebhookPayload["location"]>): Promise<ExtractedCustomerData> {
+  const addressCep = location.address?.match(/\b\d{5}-?\d{3}\b/)?.[0]?.replace(/\D/g, "");
+  if (addressCep) return { cep: addressCep, address: location.address };
+
+  try {
+    const url = new URL("https://nominatim.openstreetmap.org/reverse");
+    url.searchParams.set("format", "jsonv2");
+    url.searchParams.set("lat", String(location.latitude));
+    url.searchParams.set("lon", String(location.longitude));
+    url.searchParams.set("addressdetails", "1");
+    const response = await fetch(url, {
+      headers: { "User-Agent": "ALFFA-FIBRA-CRM/1.0 (www.alffafibra.com.br)" },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!response.ok) return {};
+    const data = await response.json() as { display_name?: string; address?: { postcode?: string } };
+    return {
+      cep: data.address?.postcode?.replace(/\D/g, "").slice(0, 8),
+      address: data.display_name,
+    };
+  } catch {
+    return {};
+  }
 }
