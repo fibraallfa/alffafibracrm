@@ -141,7 +141,7 @@ export class ChatbotEngineService {
       const plans = await this.getPlans(input.agent);
       const recommended = findRecommendedPlan(plans);
       const recommendation = recommended
-        ? `Para essa necessidade, recomendo o ${recommended.name} por ${formatMoney(Number(recommended.price))} + Globoplay. É a opção mais completa entre os planos disponíveis. 😊`
+        ? `Para essa necessidade, recomendo o ${recommended.name} por ${formatMoney(Number(recommended.price))} + Globoplay (GRÁTIS). É a opção mais completa entre os planos disponíveis. 😊`
         : "No momento não há planos ativos vinculados a este atendimento.";
       return {
         state: input.state,
@@ -317,7 +317,7 @@ export class ChatbotEngineService {
       return {
         state: "RECOMMEND_PLAN",
         memory,
-        reply: `Perfeito, ${getFirstName(memory.name)}! O e-mail registrado é: ${email}.\nAgora, vamos falar sobre o plano! Eu recomendo o ${recommended ? `${recommended.name} por ${formatMoney(Number(recommended.price))} + Globoplay` : "melhor combo disponível"} 🚀. Você gostaria de seguir com esse plano ou prefere outra opção?`,
+        reply: `Perfeito, ${getFirstName(memory.name)}! O e-mail registrado é: ${email}.\nAgora, vamos falar sobre o plano! Eu recomendo o ${recommended ? `${recommended.name} por ${formatMoney(Number(recommended.price))} + Globoplay (GRÁTIS)` : "melhor combo disponível"} 🚀. Você gostaria de seguir com esse plano ou prefere outra opção?`,
       };
     }
 
@@ -472,7 +472,7 @@ export class ChatbotEngineService {
     return {
       state: "CONFIRM_DATA",
       memory,
-      reply: `Ótima escolha, ${getFirstName(memory.name)}! 🎉 Você optou pelo ${input.plan.name} por ${formatMoney(Number(input.plan.price))} + Globoplay.\n${buildSummary(memory)}\n\nEstá tudo correto? ✅`,
+      reply: `Ótima escolha, ${getFirstName(memory.name)}! 🎉 Você optou pelo ${input.plan.name} por ${formatMoney(Number(input.plan.price))} + Globoplay (GRÁTIS).\n${buildSummary(memory)}\n\nEstá tudo correto? ✅`,
     };
   }
 
@@ -875,7 +875,7 @@ function buildSummary(memory: ChatMemory) {
 
 function formatPlanList(plans: PlanCandidate[]) {
   if (!plans.length) return "No momento não há planos ativos cadastrados.";
-  return plans.map((plan) => `✅ ${plan.name} → ${formatMoney(Number(plan.price))} + Globoplay`).join("\n");
+  return plans.map((plan) => `✅ ${plan.name} → ${formatMoney(Number(plan.price))} + Globoplay (GRÁTIS)`).join("\n");
 }
 
 function findRecommendedPlan(plans: PlanCandidate[]) {
