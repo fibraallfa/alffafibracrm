@@ -46,6 +46,7 @@ export class ZapiService {
           return response.json() as Promise<unknown>;
         }
 
+        const responseBody = await response.text();
         await writeTechnicalLog({
           level: "ERROR",
           category: "integration",
@@ -54,6 +55,7 @@ export class ZapiService {
           endpoint: "send-text",
           statusCode: response.status,
           integration: "zapi",
+          metadata: { response: responseBody.slice(0, 500) },
         });
 
         if (response.status < 500 || attempt === 2) {
