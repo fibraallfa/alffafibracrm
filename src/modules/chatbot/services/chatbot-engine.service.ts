@@ -20,6 +20,49 @@ export class ChatbotEngineService {
     return this.cepRepository.findByCep(cep);
   }
 
+  async handleIncomingCall(input: {
+    phone: string;
+    providerId?: string;
+    rawPayload?: Prisma.InputJsonValue;
+    instanceId?: string;
+  }) {
+    const phone = normalizeWhatsappPhone(input.phone);
+    const agent = await this.chatbotRepository.getAgentByInstance(input.instanceId);
+    const conversation = await this.chatbotRepository.findOrCreateConversation(phone, agent?.id);
+    const eventId = input.providerId ? `call:${input.providerId}` : undefined;
+
+    if (eventId) {
+      const existing = await this.chatbotRepository.findMessageByProviderId(eventId);
+      if (existing) return { state: conversation.state, replied: false, duplicated: true };
+      const claimed = await this.chatbotRepository.claimInboundMessage({
+        conversationId: conversation.id,
+        body: "[Ligação recebida]",
+        providerId: eventId,
+        rawPayload: input.rawPayload ?? {},
+      });
+      if (!claimed) return { state: conversation.state, replied: false, duplicated: true };
+    } else {
+      await this.chatbotRepository.saveMessage({
+        conversationId: conversation.id,
+        direction: "inbound",
+        body: "[Ligação recebida]",
+        rawPayload: input.rawPayload ?? {},
+      });
+    }
+
+    const memory = normalizeMemory(conversation.memory);
+    const resumePrompt = callResumePrompt(conversation.state, memory, agent);
+    const reply = `Não consigo atender ligações por aqui, mas continuo com você pelo WhatsApp. 😊\n\n${resumePrompt}`;
+    await this.zapiService.sendText({ phone, message: reply, config: agentConfig(agent) });
+    await this.chatbotRepository.saveMessage({
+      conversationId: conversation.id,
+      direction: "outbound",
+      body: reply,
+    });
+
+    return { state: conversation.state, replied: true, duplicated: false };
+  }
+
   async processIncomingMessage(input: {
     phone: string;
     message: string;
@@ -1017,6 +1060,27 @@ function promptForState(state: string, firstName?: string) {
     CHOOSE_PLAN: "Qual plano você gostaria de escolher?",
   };
   return prompts[state] ?? "Me envie a próxima informação para continuarmos.";
+}
+
+function callResumePrompt(
+  state: string,
+  memory: ChatMemory,
+  agent: Awaited<ReturnType<ChatbotRepository["getAgentByInstance"]>>,
+) {
+  if (state === "START") {
+    return interpolate(
+      flowMessage(
+        agent?.flow,
+        "START",
+        `Olá! Eu sou o ${agent?.name ?? "Cris"}, consultor comercial da Claro. Pode me informar o CEP da instalação?`,
+      ),
+      memory,
+      agent?.name,
+    );
+  }
+  if (state === "FINISHED") return "Seu atendimento já está registrado. Se precisar, envie reiniciar para começar novamente.";
+  if (state === "HUMAN_HANDOFF") return "Seu atendimento está sinalizado para um consultor humano continuar por aqui.";
+  return promptForState(state, getFirstName(memory.name));
 }
 
 function extractedValueForState(state: string, data?: ExtractedCustomerData) {

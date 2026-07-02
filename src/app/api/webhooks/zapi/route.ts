@@ -18,6 +18,8 @@ type ZapiWebhookPayload = {
   isGroup?: boolean;
   messageId?: string;
   id?: string;
+  callId?: string;
+  notification?: string;
   body?: string;
   message?: {
     text?: string;
@@ -50,8 +52,19 @@ export async function POST(request: Request) {
     }
 
     const phone = payload.phone ?? payload.sender ?? payload.from;
-    const incoming = await extractIncomingMessage(payload);
     const providerId = payload.messageId ?? payload.id;
+
+    if (phone && isIncomingCallNotification(payload.notification)) {
+      const result = await chatbotEngineService.handleIncomingCall({
+        phone,
+        providerId: payload.callId ?? providerId,
+        rawPayload: payload as Prisma.InputJsonValue,
+        instanceId: payload.instanceId,
+      });
+      return NextResponse.json(successResponse("Ligação recusada e fluxo retomado.", result));
+    }
+
+    const incoming = await extractIncomingMessage(payload);
 
     if (!phone || !incoming.message) {
       return NextResponse.json(errorResponse("Payload invalido.", "INVALID_WEBHOOK"), {
@@ -85,6 +98,11 @@ export async function POST(request: Request) {
       status: 500,
     });
   }
+}
+
+function isIncomingCallNotification(notification?: string) {
+  return ["CALL_RECEIVED", "CALL_VOICE", "CALL_MISSED", "CALL_MISSED_VOICE", "CALL_MISSED_VIDEO"]
+    .includes(notification ?? "");
 }
 
 async function extractIncomingMessage(payload: ZapiWebhookPayload) {
