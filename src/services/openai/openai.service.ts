@@ -35,10 +35,14 @@ export class OpenAiService {
             text: [
               "Leia este documento brasileiro e extraia somente dados explicitamente visiveis.",
               "Pode ser conta de consumo, RG, CNH ou outro comprovante.",
+              "Quando houver conta de luz/agua/telefone, procure CEP no endereco de instalacao ou endereco do cliente.",
+              "CEP brasileiro normalmente aparece como 00000-000 ou perto da palavra CEP. Nao confunda CEP com CPF, CNPJ, nota fiscal ou codigo da concessionaria.",
+              "CPF pode aparecer em RG, CNH, conta ou cadastro do titular. Data de nascimento pode aparecer como nascimento, nasc., data nasc. ou DN.",
               "Nunca deduza nem complete dados ilegíveis. Use null quando não houver certeza.",
               "Responda apenas JSON válido, sem markdown, neste formato:",
-              '{"cep":null,"fullName":null,"cpf":null,"birthDate":null,"streetNumber":null,"address":null,"email":null}',
+              '{"cep":null,"fullName":null,"cpf":null,"birthDate":null,"streetNumber":null,"address":null,"email":null,"rawText":null}',
               "Normalize CEP como 8 dígitos, CPF como 11 dígitos e nascimento como DD/MM/AAAA.",
+              "Em rawText, coloque o texto bruto que conseguiu ler do documento, mesmo que incompleto.",
             ].join("\n"),
           },
           media,
@@ -83,6 +87,7 @@ export type ExtractedCustomerData = {
   streetNumber?: string;
   address?: string;
   email?: string;
+  rawText?: string;
 };
 
 function parseExtractedCustomerData(value: string): ExtractedCustomerData {
@@ -92,23 +97,64 @@ function parseExtractedCustomerData(value: string): ExtractedCustomerData {
     if (start < 0 || end <= start) return {};
     const parsed = JSON.parse(value.slice(start, end + 1)) as Record<string, unknown>;
     const text = (key: string) => typeof parsed[key] === "string" && parsed[key] ? String(parsed[key]).trim() : undefined;
+    const rawText = text("rawText") ?? text("ocrText") ?? text("texto") ?? text("textoBruto");
     return {
-      cep: digitsWithLength(text("cep"), 8),
+      cep: normalizeCep(text("cep")) ?? findLikelyCep(rawText),
       fullName: text("fullName"),
-      cpf: digitsWithLength(text("cpf"), 11),
-      birthDate: text("birthDate"),
+      cpf: digitsWithLength(text("cpf"), 11) ?? findCpf(rawText),
+      birthDate: normalizeBirthDate(text("birthDate")) ?? findBirthDate(rawText),
       streetNumber: text("streetNumber"),
       address: text("address"),
       email: text("email"),
+      rawText,
     };
   } catch {
     return {};
   }
 }
 
+function normalizeCep(value: string | undefined) {
+  if (!value) return undefined;
+  const digits = value.replace(/\D/g, "");
+  return digits.length >= 8 ? digits.slice(0, 8) : undefined;
+}
+
 function digitsWithLength(value: string | undefined, length: number) {
   const digits = value?.replace(/\D/g, "");
   return digits?.length === length ? digits : undefined;
+}
+
+function findLikelyCep(value: string | undefined) {
+  if (!value) return undefined;
+
+  const formatted = value.match(/\b\d{5}\s*[-–—.]?\s*\d{3}\b/);
+  if (formatted) return formatted[0].replace(/\D/g, "");
+
+  const nearCep = value.match(/cep\D{0,20}(\d[\d\s.\-–—]{6,}\d)/i);
+  const digits = nearCep?.[1]?.replace(/\D/g, "");
+  return digits && digits.length >= 8 ? digits.slice(0, 8) : undefined;
+}
+
+function findCpf(value: string | undefined) {
+  if (!value) return undefined;
+  const formatted = value.match(/\b\d{3}\.?\s*\d{3}\.?\s*\d{3}\s*[-–—]?\s*\d{2}\b/);
+  return formatted?.[0]?.replace(/\D/g, "");
+}
+
+function normalizeBirthDate(value: string | undefined) {
+  if (!value) return undefined;
+  const match = value.match(/\b(\d{1,2})[\/.\-\s](\d{1,2})[\/.\-\s](\d{2,4})\b/);
+  if (!match) return undefined;
+  const day = match[1].padStart(2, "0");
+  const month = match[2].padStart(2, "0");
+  const year = match[3].length === 2 ? `19${match[3]}` : match[3];
+  return `${day}/${month}/${year}`;
+}
+
+function findBirthDate(value: string | undefined) {
+  if (!value) return undefined;
+  const nearLabel = value.match(/(?:nascimento|nasc\.?|data nasc\.?|dn)\D{0,20}(\d{1,2}[\/.\-\s]\d{1,2}[\/.\-\s]\d{2,4})/i);
+  return normalizeBirthDate(nearLabel?.[1]);
 }
 
 function audioExtension(mimeType: string) {

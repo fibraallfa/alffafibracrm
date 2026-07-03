@@ -255,6 +255,7 @@ export class ChatbotEngineService {
         city: coverage?.city ?? viaCep?.city,
         state: coverage?.state ?? viaCep?.state,
       });
+      applyAddressDetailsFromMessage(memory, text);
 
       if (!coverage) {
         return {
@@ -606,6 +607,7 @@ export class ChatbotEngineService {
         city: coverage?.city ?? viaCep?.city,
         state: coverage?.state ?? viaCep?.state,
       });
+      applyAddressDetailsFromMessage(corrected, text);
     } else if (/numero|n[uú]mero|casa|residencia|residência/.test(normalized)) {
       corrected.streetNumber = parseSimpleNumber(text) ?? corrected.streetNumber;
     } else if (/complemento|apto|apartamento|casa|bloco|fundos/.test(normalized)) {
@@ -740,8 +742,17 @@ function normalizeWhatsappPhone(phone: string) {
 }
 
 function parseCep(text: string) {
+  const formatted = text.match(/\b\d{5}\s*[-–—.]?\s*\d{3}\b/);
+  if (formatted) return formatted[0].replace(/\D/g, "").slice(0, 8);
+
+  const nearCep = text.match(/cep\D{0,20}(\d[\d\s.\-–—]{6,}\d)/i);
+  const nearCepDigits = nearCep?.[1]?.replace(/\D/g, "");
+  if (nearCepDigits && nearCepDigits.length >= 8) return nearCepDigits.slice(0, 8);
+
   const digits = onlyDigits(text);
-  if (digits.length >= 8) return digits.slice(0, 8);
+  const withoutSeparators = text.replace(/[\s.\-–—()/]/g, "");
+  if (digits.length === 8 && /^[\d\s.\-–—()/]+$/.test(text.trim())) return digits;
+  if (digits.length === 8 && withoutSeparators === digits) return digits;
 
   const byWords = wordsToDigits(text);
   return byWords.length >= 8 ? byWords.slice(0, 8) : "";
@@ -866,6 +877,51 @@ function applyAddress(memory: ChatMemory, address: ViaCepAddress) {
   memory.neighborhood = address.neighborhood ?? memory.neighborhood;
   memory.city = address.city ?? memory.city;
   memory.state = address.state ?? memory.state;
+}
+
+function applyAddressDetailsFromMessage(memory: ChatMemory, text: string) {
+  const details = extractAddressDetailsFromMessage(text);
+  memory.address = details.street ?? memory.address;
+  memory.streetNumber = details.streetNumber ?? memory.streetNumber;
+  memory.complement = details.complement ?? memory.complement;
+}
+
+function extractAddressDetailsFromMessage(text: string) {
+  const cleanLines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const withoutCep = text.replace(/\b\d{5}\s*[-–—.]?\s*\d{3}\b/g, " ").trim();
+  const streetNumber = findStreetNumber(text);
+  const complement = findComplement(text);
+  const streetLine = cleanLines.find((line) => {
+    const normalized = normalizeText(line);
+    return /^(rua|r |avenida|av |estrada|rodovia|travessa|alameda|praca|praça)\b/.test(normalized);
+  });
+  const beforeNumber = withoutCep
+    .split(/(?:numero|número|n[ºo]?\.?)\s*\d+/i)[0]
+    ?.split(/\r?\n/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .at(0);
+  const street = streetLine ?? beforeNumber;
+
+  return {
+    street: street && /\D/.test(street) ? toTitleCase(street) : undefined,
+    streetNumber,
+    complement,
+  };
+}
+
+function findStreetNumber(text: string) {
+  const match = text.match(/(?:numero|número|n[ºo]?\.?)\s*(\d+[A-Za-z]?)/i);
+  return match?.[1] ?? "";
+}
+
+function findComplement(text: string) {
+  const match = text.match(/\b(casa|apto|apartamento|bloco|fundos|sobrado|lote|quadra)\s*([A-Za-z0-9-]+)?/i);
+  if (!match) return "";
+  return normalizeComplement([match[1], match[2]].filter(Boolean).join(" "));
 }
 
 async function fetchViaCep(cep: string): Promise<ViaCepAddress | null> {
