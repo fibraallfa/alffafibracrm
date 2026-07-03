@@ -172,7 +172,7 @@ export class ChatbotEngineService {
       return {
         state: "ASK_CEP",
         memory: {},
-        reply: messageFor("START", `Olá 👋! Eu sou o ${input.agent?.name ?? "Cris"}, atendente virtual da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?`),
+        reply: messageFor("START", `Olá 👋! Eu sou o ${input.agent?.name ?? "Cris"}, consultor da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?`),
       };
     }
 
@@ -233,7 +233,7 @@ export class ChatbotEngineService {
       return {
         state: "ASK_CEP",
         memory,
-        reply: messageFor("START", `Olá 👋! Eu sou o ${input.agent?.name ?? "Cris"}, atendente virtual da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?`),
+        reply: messageFor("START", `Olá 👋! Eu sou o ${input.agent?.name ?? "Cris"}, consultor da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?`),
       };
     }
 
@@ -509,7 +509,7 @@ export class ChatbotEngineService {
     return {
       state: "ASK_CEP",
       memory: {},
-      reply: messageFor("START", `Olá 👋! Eu sou o ${input.agent?.name ?? "Cris"}, atendente virtual da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?`),
+      reply: messageFor("START", `Olá 👋! Eu sou o ${input.agent?.name ?? "Cris"}, consultor da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?`),
     };
   }
 

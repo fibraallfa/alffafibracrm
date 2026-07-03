@@ -49,7 +49,7 @@ const flow = {
       state: "START",
       title: "Entrada Meta Ads",
       message:
-        "Olá 👋! Eu sou o Cris, atendente virtual da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?",
+        "Olá 👋! Eu sou o Cris, consultor da Claro. Estou aqui pra facilitar seu atendimento. Pode me informar o CEP da instalação?",
     },
     {
       id: "cep",
