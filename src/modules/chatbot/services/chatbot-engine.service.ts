@@ -750,9 +750,11 @@ function parseCep(text: string) {
   if (nearCepDigits && nearCepDigits.length >= 8) return nearCepDigits.slice(0, 8);
 
   const digits = onlyDigits(text);
-  const withoutSeparators = text.replace(/[\s.\-–—()/]/g, "");
+  const withoutSeparators = text.replace(/[\s,.\-–—()/]/g, "");
+  const cepLabelNormalized = withoutSeparators.replace(/^cep:?/i, "");
   if (digits.length === 8 && /^[\d\s.\-–—()/]+$/.test(text.trim())) return digits;
   if (digits.length === 8 && withoutSeparators === digits) return digits;
+  if (digits.length === 8 && cepLabelNormalized === digits) return digits;
 
   const byWords = wordsToDigits(text);
   return byWords.length >= 8 ? byWords.slice(0, 8) : "";
