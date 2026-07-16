@@ -221,6 +221,7 @@ export class ChatbotEngineService {
         state: input.state,
         agent: input.agent,
         customerName: memory.name,
+        memory,
       });
       return {
         state: input.state,
@@ -230,6 +231,15 @@ export class ChatbotEngineService {
     }
 
     if (input.state === "START") {
+      const cepFromStart = parseCep(text);
+      if (cepFromStart) {
+        return this.handleCepStep({
+          cep: cepFromStart,
+          text,
+          memory,
+        });
+      }
+
       return {
         state: "ASK_CEP",
         memory,
@@ -240,6 +250,21 @@ export class ChatbotEngineService {
     if (input.state === "ASK_CEP") {
       const cep = parseCep(text);
       if (!cep) {
+        if (shouldUseAiFallbackForState("ASK_CEP", text)) {
+          const answer = await this.answerOutsideFlow({
+            message: text,
+            state: input.state,
+            agent: input.agent,
+            customerName: memory.name,
+            memory,
+          });
+          return {
+            state: "ASK_CEP",
+            memory,
+            reply: `${answer}\n\n${promptForState("ASK_CEP", firstName)}`,
+          };
+        }
+
         return {
           state: "ASK_CEP",
           memory,
@@ -247,36 +272,30 @@ export class ChatbotEngineService {
         };
       }
 
-      const [coverage, viaCep] = await Promise.all([this.validateCoverage(cep), fetchViaCep(cep)]);
-      memory.cep = cep;
-      applyAddress(memory, {
-        street: coverage?.street ?? viaCep?.street,
-        neighborhood: coverage?.neighborhood ?? viaCep?.neighborhood,
-        city: coverage?.city ?? viaCep?.city,
-        state: coverage?.state ?? viaCep?.state,
-      });
-      applyAddressDetailsFromMessage(memory, text);
-
-      if (!coverage) {
-        return {
-          state: "FINISHED_UNAVAILABLE",
-          memory,
-          reply: `Encontrei seu endereço 😊,📍 CEP ${formatCep(cep)}, localizado ${formatAddressShort(memory)}. No momento a Claro ainda não possui disponibilidade para instalação nessa região. Assim que houver expansão de cobertura, teremos prazer em atendê-lo. Obrigado pelo seu interesse! 💙`,
-        };
-      }
-
-      return {
-        state: "ASK_NAME",
-        memory,
-        reply: `Boa notícia 🎉! Temos viabilidade no CEP ${formatCep(cep)}, localizado ${formatAddressShort(memory)}. Consigo te atender com a Claro 🚀. Para seguir com a contratação, preciso coletar alguns dados seus.\n\nQual é o seu nome completo?`,
-      };
+      return this.handleCepStep({ cep, text, memory });
     }
 
     if (input.state === "ASK_NAME") {
-      if (text.length < 3 || onlyDigits(text).length > 2) {
+      const fullName = parseFullName(text);
+      if (!fullName) {
+        if (shouldUseAiFallbackForState("ASK_NAME", text)) {
+          const answer = await this.answerOutsideFlow({
+            message: text,
+            state: input.state,
+            agent: input.agent,
+            customerName: memory.name,
+            memory,
+          });
+          return {
+            state: "ASK_NAME",
+            memory,
+            reply: `${answer}\n\n${promptForState("ASK_NAME", firstName)}`,
+          };
+        }
+
         return { state: "ASK_NAME", memory, reply: "Pode me informar seu nome completo, por favor? 😊" };
       }
-      memory.name = toTitleCase(text);
+      memory.name = fullName;
       return {
         state: "ASK_DOCUMENT",
         memory,
@@ -287,6 +306,21 @@ export class ChatbotEngineService {
     if (input.state === "ASK_DOCUMENT") {
       const document = parseDocument(text);
       if (!document.valid) {
+        if (shouldUseAiFallbackForState("ASK_DOCUMENT", text)) {
+          const answer = await this.answerOutsideFlow({
+            message: text,
+            state: input.state,
+            agent: input.agent,
+            customerName: memory.name,
+            memory,
+          });
+          return {
+            state: "ASK_DOCUMENT",
+            memory,
+            reply: `${answer}\n\n${promptForState("ASK_DOCUMENT", firstName)}`,
+          };
+        }
+
         return {
           state: "ASK_DOCUMENT",
           memory,
@@ -305,6 +339,21 @@ export class ChatbotEngineService {
     if (input.state === "ASK_BIRTH_DATE") {
       const birthDate = parseBirthDate(text);
       if (!birthDate) {
+        if (shouldUseAiFallbackForState("ASK_BIRTH_DATE", text)) {
+          const answer = await this.answerOutsideFlow({
+            message: text,
+            state: input.state,
+            agent: input.agent,
+            customerName: memory.name,
+            memory,
+          });
+          return {
+            state: "ASK_BIRTH_DATE",
+            memory,
+            reply: `${answer}\n\n${promptForState("ASK_BIRTH_DATE", firstName)}`,
+          };
+        }
+
         return {
           state: "ASK_BIRTH_DATE",
           memory,
@@ -322,6 +371,21 @@ export class ChatbotEngineService {
     if (input.state === "ASK_STREET_NUMBER") {
       const streetNumber = parseSimpleNumber(text);
       if (!streetNumber) {
+        if (shouldUseAiFallbackForState("ASK_STREET_NUMBER", text)) {
+          const answer = await this.answerOutsideFlow({
+            message: text,
+            state: input.state,
+            agent: input.agent,
+            customerName: memory.name,
+            memory,
+          });
+          return {
+            state: "ASK_STREET_NUMBER",
+            memory,
+            reply: `${answer}\n\n${promptForState("ASK_STREET_NUMBER", firstName)}`,
+          };
+        }
+
         return {
           state: "ASK_STREET_NUMBER",
           memory,
@@ -337,6 +401,21 @@ export class ChatbotEngineService {
     }
 
     if (input.state === "ASK_COMPLEMENT") {
+      if (shouldUseAiFallbackForState("ASK_COMPLEMENT", text)) {
+        const answer = await this.answerOutsideFlow({
+          message: text,
+          state: input.state,
+          agent: input.agent,
+          customerName: memory.name,
+          memory,
+        });
+        return {
+          state: "ASK_COMPLEMENT",
+          memory,
+          reply: `${answer}\n\n${promptForState("ASK_COMPLEMENT", firstName)}`,
+        };
+      }
+
       memory.complement = normalizeComplement(text);
       return {
         state: "ASK_BILLING_DUE_DAY",
@@ -348,6 +427,21 @@ export class ChatbotEngineService {
     if (input.state === "ASK_BILLING_DUE_DAY") {
       const billingDay = parseBillingDay(text);
       if (!billingDay) {
+        if (shouldUseAiFallbackForState("ASK_BILLING_DUE_DAY", text)) {
+          const answer = await this.answerOutsideFlow({
+            message: text,
+            state: input.state,
+            agent: input.agent,
+            customerName: memory.name,
+            memory,
+          });
+          return {
+            state: "ASK_BILLING_DUE_DAY",
+            memory,
+            reply: `${answer}\n\n${promptForState("ASK_BILLING_DUE_DAY", firstName)}`,
+          };
+        }
+
         return {
           state: "ASK_BILLING_DUE_DAY",
           memory,
@@ -365,6 +459,21 @@ export class ChatbotEngineService {
     if (input.state === "ASK_EMAIL") {
       const email = parseEmail(text);
       if (!email) {
+        if (shouldUseAiFallbackForState("ASK_EMAIL", text)) {
+          const answer = await this.answerOutsideFlow({
+            message: text,
+            state: input.state,
+            agent: input.agent,
+            customerName: memory.name,
+            memory,
+          });
+          return {
+            state: "ASK_EMAIL",
+            memory,
+            reply: `${answer}\n\n${promptForState("ASK_EMAIL", firstName)}`,
+          };
+        }
+
         return { state: "ASK_EMAIL", memory, reply: "Esse e-mail não parece válido. Pode me enviar novamente, por favor? 😊" };
       }
       memory.email = email;
@@ -491,10 +600,17 @@ export class ChatbotEngineService {
     }
 
     if (input.state === "FINISHED") {
+      const answer = await this.answerOutsideFlow({
+        message: text,
+        state: input.state,
+        agent: input.agent,
+        customerName: memory.name,
+        memory,
+      });
       return {
         state: "FINISHED",
         memory,
-        reply: "Seu atendimento já está registrado. Se precisar falar com um consultor, envie atendente. Para começar novamente, envie reiniciar. 😊",
+        reply: answer || "Sigo por aqui como seu consultor da Claro. Se quiser, posso te ajudar com outra dúvida, retomar a contratação ou consultar outro endereço. 😊",
       };
     }
 
@@ -516,6 +632,37 @@ export class ChatbotEngineService {
   private async getPlans(agent: Awaited<ReturnType<ChatbotRepository["getAgentByInstance"]>>) {
     if (!agent) return this.chatbotRepository.listActivePlans();
     return this.chatbotRepository.listActivePlans(agent.id);
+  }
+
+  private async handleCepStep(input: {
+    cep: string;
+    text: string;
+    memory: ChatMemory;
+  }): Promise<NextBotResponse> {
+    const memory = { ...input.memory, cep: input.cep };
+    const [coverage, viaCep] = await Promise.all([this.validateCoverage(input.cep), fetchViaCep(input.cep)]);
+
+    applyAddress(memory, {
+      street: coverage?.street ?? viaCep?.street,
+      neighborhood: coverage?.neighborhood ?? viaCep?.neighborhood,
+      city: coverage?.city ?? viaCep?.city,
+      state: coverage?.state ?? viaCep?.state,
+    });
+    applyAddressDetailsFromMessage(memory, input.text);
+
+    if (!coverage) {
+      return {
+        state: "FINISHED_UNAVAILABLE",
+        memory,
+        reply: `Encontrei seu endereço 😊,📍 CEP ${formatCep(input.cep)}, localizado ${formatAddressShort(memory)}. No momento a Claro ainda não possui disponibilidade para instalação nessa região. Assim que houver expansão de cobertura, teremos prazer em atendê-lo. Obrigado pelo seu interesse! 💙`,
+      };
+    }
+
+    return {
+      state: "ASK_NAME",
+      memory,
+      reply: `Boa notícia 🎉! Temos viabilidade no CEP ${formatCep(input.cep)}, localizado ${formatAddressShort(memory)}. Consigo te atender com a Claro 🚀. Para seguir com a contratação, preciso coletar alguns dados seus.\n\nQual é o seu nome completo?`,
+    };
   }
 
   private selectPlanAndConfirm(input: { memory: ChatMemory; plan: PlanCandidate }): NextBotResponse {
@@ -654,17 +801,30 @@ export class ChatbotEngineService {
     state: string;
     customerName?: string;
     agent: Awaited<ReturnType<ChatbotRepository["getAgentByInstance"]>>;
+    memory: ChatMemory;
   }) {
     try {
+      const plans = await this.getPlans(input.agent);
+      const planLines = plans
+        .map((plan, index) => `${index + 1}. ${plan.name} ${plan.speed} - ${formatMoney(Number(plan.price))}${plan.description ? ` - ${plan.description}` : ""}`)
+        .join("\n");
+
       return await this.openAiService.answerCommercialQuestion(
         [
-          `Voce e ${input.agent?.name ?? "Cris"}, Consultor Comercial da Claro.`,
-          `Personalidade: ${input.agent?.personality ?? "Vendedor humano, cordial e objetivo."}`,
+          `Voce e ${input.agent?.name ?? "Cris"}, consultor comercial da Claro, falando com o cliente no WhatsApp.`,
+          `Personalidade: ${input.agent?.personality ?? "Consultor humano, persuasivo, divertido, cordial e objetivo."}`,
           `Regras:\n${formatAgentRules(input.agent?.rules)}`,
-          `O funil esta na etapa ${input.state}. Responda a duvida sem pular etapa.`,
+          `O funil esta na etapa ${input.state}. Responda a mensagem do cliente, trate objecoes com postura comercial e depois retome exatamente para a etapa atual sem pular o fluxo.`,
+          "Voce nunca pode dizer que e IA, robo, automacao ou assistente virtual.",
+          "Voce sempre fala como consultor da Claro.",
+          "Se o cliente demonstrar objecao, falta de interesse, cancelamento ou desconfiança, tente reverter com argumento comercial leve, humano e seguro.",
+          "Se precisar falar de planos, use somente os planos listados abaixo.",
+          "Se precisar falar de endereco ou cobertura, use apenas os dados ja conhecidos nesta conversa.",
           "Nao responda temas politicos, religiosos ou fora do contexto comercial.",
-          "Nunca diga que e IA, robo ou secretario eletronico.",
-          "Use no maximo um emoji.",
+          "Use humor leve e natural quando combinar com a conversa, sem exagerar.",
+          "Use no maximo dois emojis.",
+          `Contexto conhecido do cliente:\n${summarizeMemoryForAi(input.memory)}`,
+          `Planos disponiveis:\n${planLines || "Nenhum plano ativo encontrado no momento."}`,
           `Cliente: ${input.customerName ?? "cliente"}`,
           `Pergunta: ${input.message}`,
         ].join("\n\n"),
@@ -758,6 +918,28 @@ function parseCep(text: string) {
 
   const byWords = wordsToDigits(text);
   return byWords.length >= 8 ? byWords.slice(0, 8) : "";
+}
+
+function parseFullName(text: string) {
+  const normalized = normalizeText(text);
+  if (!normalized || !parseFullNameLike(text)) return "";
+
+  const cleaned = text
+    .replace(/[^\p{L}\s'-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) return "";
+
+  const words = cleaned.split(" ");
+  if (words.length < 2 || words.length > 7) return "";
+
+  const fillerWords = new Set(["da", "de", "do", "das", "dos", "e"]);
+  const relevantWords = words.filter((word) => !fillerWords.has(normalizeText(word)));
+  if (relevantWords.length < 2) return "";
+  if (relevantWords.some((word) => normalizeText(word).length < 2)) return "";
+
+  return toTitleCase(cleaned);
 }
 
 function parseDocument(text: string): { valid: false; type?: never; formatted?: never } | { valid: true; type: "CPF" | "CNPJ"; formatted: string } {
@@ -1095,12 +1277,89 @@ function isRestartRequest(text: string) {
 
 function shouldAnswerOutsideFlow(text: string, state: string) {
   if (["START", "CONFIRM_DATA", "CORRECTION", "FINISHED", "FINISHED_UNAVAILABLE", "HUMAN_HANDOFF"].includes(state)) return false;
-  return looksLikeQuestion(text) && !parseEmail(text) && !parseCep(text) && !parseBillingDay(text);
+  return shouldUseAiFallbackForState(state, text);
+}
+
+function shouldUseAiFallbackForState(state: string, text: string) {
+  if (!text.trim()) return false;
+
+  const conversationalDiversion =
+    looksLikeQuestion(text) ||
+    looksLikeObjection(text) ||
+    looksLikeCancellation(text) ||
+    looksLikeTopicChange(text);
+
+  if (!conversationalDiversion) return false;
+
+  if (state === "ASK_CEP") return !parseCep(text);
+  if (state === "ASK_NAME") return !parseFullNameLike(text);
+  if (state === "ASK_DOCUMENT") return !parseDocument(text).valid;
+  if (state === "ASK_BIRTH_DATE") return !parseBirthDate(text);
+  if (state === "ASK_STREET_NUMBER") return !parseSimpleNumber(text);
+  if (state === "ASK_COMPLEMENT") return true;
+  if (state === "ASK_BILLING_DUE_DAY") return !parseBillingDay(text);
+  if (state === "ASK_EMAIL") return !parseEmail(text);
+
+  return false;
 }
 
 function looksLikeQuestion(text: string) {
   const normalized = normalizeText(text);
   return text.includes("?") || /^(como|qual|quais|quanto|quando|onde|por que|porque|tem|voce|voces|pode|posso)\b/.test(normalized);
+}
+
+function looksLikeObjection(text: string) {
+  const normalized = normalizeText(text);
+  return [
+    "nao tenho interesse",
+    "nao quero",
+    "nao gostei",
+    "muito caro",
+    "ta caro",
+    "esta caro",
+    "vou pensar",
+    "depois eu vejo",
+    "nao compensa",
+    "nao vale a pena",
+    "nao preciso",
+    "nao quero continuar",
+    "sem interesse",
+  ].some((term) => normalized.includes(term));
+}
+
+function looksLikeCancellation(text: string) {
+  const normalized = normalizeText(text);
+  return ["cancelar", "cancelamento", "desistir", "desistencia", "encerrar", "parar por aqui"].some((term) => normalized.includes(term));
+}
+
+function looksLikeTopicChange(text: string) {
+  const normalized = normalizeText(text);
+  return ["plano", "internet", "fibra", "valor", "preco", "preço", "atendente", "consultor", "humano", "cobertura"].some((term) =>
+    normalized.includes(normalizeText(term)),
+  );
+}
+
+function parseFullNameLike(text: string) {
+  const normalized = normalizeText(text);
+  if (!normalized) return false;
+  if (looksLikeObjection(text) || looksLikeCancellation(text) || looksLikeQuestion(text) || looksLikeTopicChange(text)) return false;
+  if (onlyDigits(text).length > 2) return false;
+
+  const cleaned = text
+    .replace(/[^\p{L}\s'-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned) return false;
+
+  const words = cleaned.split(" ");
+  if (words.length < 2 || words.length > 7) return false;
+
+  const fillerWords = new Set(["da", "de", "do", "das", "dos", "e"]);
+  const relevantWords = words.filter((word) => !fillerWords.has(normalizeText(word)));
+  if (relevantWords.length < 2) return false;
+
+  return relevantWords.every((word) => normalizeText(word).length >= 2);
 }
 
 function promptForState(state: string, firstName?: string) {
@@ -1241,4 +1500,17 @@ function formatAgentRules(rules: unknown) {
     .filter((value) => value !== false && value !== null && value !== undefined)
     .map((value) => `- ${String(value)}`)
     .join("\n") || "Nenhuma regra adicional configurada.";
+}
+
+function summarizeMemoryForAi(memory: ChatMemory) {
+  return [
+    `Nome: ${memory.name ?? "nao informado"}`,
+    `CEP: ${formatCep(memory.cep) || "nao informado"}`,
+    `Endereco: ${formatFullAddress(memory)}`,
+    `Documento: ${memory.cpfCnpj ?? "nao informado"}`,
+    `Nascimento: ${memory.birthDate ? formatDate(new Date(memory.birthDate)) : "nao informado"}`,
+    `E-mail: ${memory.email ?? "nao informado"}`,
+    `Vencimento: ${memory.billingDueDay ?? "nao informado"}`,
+    `Plano: ${memory.planName ?? "nao informado"}`,
+  ].join("\n");
 }

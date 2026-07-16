@@ -24,10 +24,23 @@ type ZapiWebhookPayload = {
   message?: {
     text?: string;
     body?: string;
+    conversation?: string;
+    content?: string;
+    extendedTextMessage?: {
+      text?: string;
+      body?: string;
+      selectedDisplayText?: string;
+    };
   };
   text?: {
     message?: string;
     body?: string;
+    content?: string;
+  };
+  extendedTextMessage?: {
+    text?: string;
+    body?: string;
+    selectedDisplayText?: string;
   };
   image?: { mimeType?: string; imageUrl?: string; caption?: string; downloadError?: string | null };
   document?: { documentUrl?: string; mimeType?: string; fileName?: string; pageCount?: number };
@@ -109,8 +122,19 @@ async function extractIncomingMessage(payload: ZapiWebhookPayload) {
   const text = (
     payload.text?.message ??
     payload.text?.body ??
+    payload.text?.content ??
     payload.message?.text ??
     payload.message?.body ??
+    payload.message?.conversation ??
+    payload.message?.content ??
+    payload.message?.extendedTextMessage?.text ??
+    payload.message?.extendedTextMessage?.body ??
+    payload.message?.extendedTextMessage?.selectedDisplayText ??
+    payload.extendedTextMessage?.text ??
+    payload.extendedTextMessage?.body ??
+    payload.extendedTextMessage?.selectedDisplayText ??
+    findNestedMessageText(payload.message) ??
+    findNestedMessageText(payload.text) ??
     payload.body ??
     ""
   ).trim();
@@ -150,6 +174,32 @@ async function extractIncomingMessage(payload: ZapiWebhookPayload) {
   }
 
   return { message: "" };
+}
+
+function findNestedMessageText(value: unknown, depth = 0): string | undefined {
+  if (!value || depth > 3) return undefined;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = findNestedMessageText(item, depth + 1);
+      if (nested) return nested;
+    }
+    return undefined;
+  }
+  if (typeof value !== "object") return undefined;
+
+  const record = value as Record<string, unknown>;
+  const preferredKeys = ["message", "body", "text", "content", "conversation", "selectedDisplayText"];
+
+  for (const key of preferredKeys) {
+    const nested = findNestedMessageText(record[key], depth + 1);
+    if (nested) return nested;
+  }
+
+  return undefined;
 }
 
 async function extractLocationData(location: NonNullable<ZapiWebhookPayload["location"]>): Promise<ExtractedCustomerData> {
