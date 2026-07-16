@@ -193,7 +193,7 @@ export class ChatbotEngineService {
       };
     }
 
-    if (asksForPlanRecommendation(text)) {
+    if (asksForExplicitPlanRecommendation(text)) {
       const plans = await this.getPlans(input.agent);
       const recommended = findRecommendedPlan(plans);
       const recommendation = recommended
@@ -206,7 +206,7 @@ export class ChatbotEngineService {
       };
     }
 
-    if (asksForPlanList(text) || isPlanQuestion(text)) {
+    if (asksForPlanList(text) || isExplicitPlanCatalogQuestion(text)) {
       const plans = await this.getPlans(input.agent);
       return {
         state: input.state,
@@ -818,11 +818,15 @@ export class ChatbotEngineService {
           "Voce nunca pode dizer que e IA, robo, automacao ou assistente virtual.",
           "Voce sempre fala como consultor da Claro.",
           "Se o cliente demonstrar objecao, falta de interesse, cancelamento ou desconfiança, tente reverter com argumento comercial leve, humano e seguro.",
+          "Responda primeiro a pergunta real do cliente de forma util, natural e convincente. Nao desvie para lista de planos se isso nao foi pedido.",
+          "So liste planos ou valores de forma organizada quando o cliente pedir opcoes, planos disponiveis, comparacao, velocidade ou preco.",
+          "Quando a pergunta for sobre uso pratico, estabilidade, trabalho, aplicativos, qualidade, instalacao ou confianca, responda como uma consultora humana explicando com clareza e seguranca.",
           "Se precisar falar de planos, use somente os planos listados abaixo.",
           "Se precisar falar de endereco ou cobertura, use apenas os dados ja conhecidos nesta conversa.",
           "Nao responda temas politicos, religiosos ou fora do contexto comercial.",
           "Use humor leve e natural quando combinar com a conversa, sem exagerar.",
           "Use no maximo dois emojis.",
+          "Depois de responder, feche puxando o cliente de volta para a etapa atual do fluxo.",
           `Contexto conhecido do cliente:\n${summarizeMemoryForAi(input.memory)}`,
           `Planos disponiveis:\n${planLines || "Nenhum plano ativo encontrado no momento."}`,
           `Cliente: ${input.customerName ?? "cliente"}`,
@@ -1418,9 +1422,9 @@ function asksForPlanList(text: string) {
   return ["ver os planos", "quero ver", "opcoes", "opcoes disponiveis", "quais planos", "outros planos"].some((term) => normalized.includes(term));
 }
 
-function asksForPlanRecommendation(text: string) {
+function asksForExplicitPlanRecommendation(text: string) {
   const normalized = normalizeText(text);
-  const mentionsPlan = /\b(plano|internet|fibra|mega|giga|velocidade)\b/.test(normalized);
+  const mentionsPlan = /\b(plano|planos|combo|internet|fibra|mega|giga|velocidade)\b/.test(normalized);
   const requestsRecommendation = [
     "melhor", "recomenda", "recomende", "recomendacao", "indica", "indique", "ideal",
     "para jogar", "para jogos", "para trabalhar", "para estudar", "mais rapido", "mais completa",
@@ -1428,9 +1432,31 @@ function asksForPlanRecommendation(text: string) {
   return mentionsPlan && requestsRecommendation;
 }
 
-function isPlanQuestion(text: string) {
+function isExplicitPlanCatalogQuestion(text: string) {
   const normalized = normalizeText(text);
-  return /\b(plano|planos|internet|fibra|mega|megas|giga|chip)\b/.test(normalized) && looksLikeQuestion(text);
+  if (!looksLikeQuestion(text)) return false;
+
+  const asksForCatalog = [
+    "quais planos",
+    "quais sao os planos",
+    "quais são os planos",
+    "quais opcoes",
+    "quais opções",
+    "quero ver os planos",
+    "me mostra os planos",
+    "me mostra as opcoes",
+    "me mostra as opções",
+    "quais velocidades",
+    "qual o valor",
+    "quais valores",
+    "qual o preco",
+    "qual o preço",
+    "quanto custa",
+    "quero comparar",
+    "me fala os combos",
+  ];
+
+  return asksForCatalog.some((term) => normalized.includes(normalizeText(term)));
 }
 
 function isAlternativeRequest(text: string) {
