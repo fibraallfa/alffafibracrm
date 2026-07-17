@@ -227,7 +227,7 @@ export class ChatbotRepository {
         owner: true,
         messages: {
           orderBy: { createdAt: "desc" },
-          take: 3,
+          take: 20,
         },
       },
       orderBy: { updatedAt: "desc" },

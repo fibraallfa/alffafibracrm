@@ -25,6 +25,7 @@ type ConversationListItem = {
   owner: ConversationUser | null;
   tags: string[];
   botActive: boolean;
+  hasPendingCustomerMessage: boolean;
   lastMessage: { id: string; direction: string; body: string; createdAt: string } | null;
   messages: Array<{ id: string; direction: string; body: string; createdAt: string }>;
 };
@@ -415,12 +416,21 @@ export function ConversationCenter() {
                   onClick={() => void loadDetail(conversation.id)}
                   className={`w-full rounded-lg border p-3 text-left transition ${selectedId === conversation.id ? "border-cyan-500 bg-cyan-50" : "hover:bg-muted/40"}`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
                       <p className="truncate font-medium">{conversation.lead?.name ?? conversation.phone}</p>
-                      <p className="text-xs text-muted-foreground">{conversation.phone}</p>
+                      {conversation.hasPendingCustomerMessage ? (
+                        <span
+                          className="inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-600 ring-2 ring-cyan-100"
+                          aria-label="Cliente aguardando resposta"
+                          title="Cliente aguardando resposta"
+                        />
+                      ) : null}
                     </div>
-                    <span className="text-[11px] text-muted-foreground">{formatTime(conversation.updatedAt)}</span>
+                    <p className="text-xs text-muted-foreground">{conversation.phone}</p>
+                  </div>
+                  <span className="text-[11px] text-muted-foreground">{formatTime(conversation.updatedAt)}</span>
                   </div>
                   <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{conversation.lastMessage?.body ?? "Sem mensagens ainda"}</p>
                   <div className="mt-3 flex flex-wrap gap-2 text-[11px]">

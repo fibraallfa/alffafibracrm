@@ -25,6 +25,11 @@ export class ConversationService {
     const items = conversations.map((conversation) => {
       const memory = this.parseMemory(conversation.memory);
       const lastMessage = conversation.messages[0] ?? null;
+      const latestInboundAt = conversation.messages.find((message) => message.direction === "inbound")?.createdAt ?? null;
+      const latestOutboundAt = conversation.messages.find((message) => message.direction === "outbound")?.createdAt ?? null;
+      const hasPendingCustomerMessage = Boolean(
+        latestInboundAt && (!latestOutboundAt || latestInboundAt.getTime() > latestOutboundAt.getTime()),
+      );
 
       return {
         id: conversation.id,
@@ -36,6 +41,7 @@ export class ConversationService {
         owner: conversation.owner ? { id: conversation.owner.id, name: conversation.owner.name, role: conversation.owner.role } : null,
         tags: memory.tags ?? [],
         botActive: !conversation.ownerUserId,
+        hasPendingCustomerMessage,
         lastMessage: lastMessage
           ? {
               id: lastMessage.id,
