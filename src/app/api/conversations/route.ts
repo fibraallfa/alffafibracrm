@@ -14,6 +14,8 @@ export async function GET(request: Request) {
     assertPermission(user, permissions.agentsEdit);
     const { searchParams } = new URL(request.url);
     const conversationId = searchParams.get("conversationId");
+    const offset = Number(searchParams.get("offset") ?? "0");
+    const limit = Number(searchParams.get("limit") ?? "25");
 
     if (conversationId) {
       const conversation = await conversationService.getDetail(conversationId);
@@ -21,7 +23,10 @@ export async function GET(request: Request) {
     }
 
     const [conversations, users] = await Promise.all([
-      conversationService.list(),
+      conversationService.list({
+        offset: Number.isFinite(offset) && offset > 0 ? offset : 0,
+        limit: Number.isFinite(limit) && limit > 0 ? Math.min(limit, 100) : 25,
+      }),
       conversationService.listAssignableUsers(),
     ]);
 

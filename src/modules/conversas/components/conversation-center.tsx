@@ -52,11 +52,18 @@ type ConversationDetail = {
 };
 
 type ConversationPayload = {
-  conversations: ConversationListItem[];
+  conversations: {
+    items: ConversationListItem[];
+    total: number;
+    offset: number;
+    limit: number;
+    hasMore: boolean;
+  };
   users: ConversationUser[];
 };
 
 const TAG_SUGGESTIONS = ["Novo lead", "Prioridade", "Retorno", "Instalação", "Venda", "Sem viabilidade"];
+const PAGE_SIZE = 20;
 
 export function ConversationCenter() {
   const { data: currentUser } = useCurrentUser();
@@ -70,6 +77,7 @@ export function ConversationCenter() {
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSavingTags, setIsSavingTags] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -80,21 +88,55 @@ export function ConversationCenter() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  async function loadConversations(preferredId?: string | null) {
-    setIsLoading(true);
-    const response = await fetch("/api/conversations", { cache: "no-store" });
+  async function loadConversations(params?: {
+    preferredId?: string | null;
+    reset?: boolean;
+    silent?: boolean;
+    limitOverride?: number;
+  }) {
+    const reset = params?.reset ?? false;
+    const currentCount = reset ? 0 : payload?.conversations.items.length ?? 0;
+    const offset = reset ? 0 : currentCount;
+    const limit = params?.limitOverride ?? PAGE_SIZE;
+
+    if (!params?.silent) {
+      if (reset) {
+        setIsLoading(true);
+      } else {
+        setIsLoadingMore(true);
+      }
+    }
+
+    const response = await fetch(`/api/conversations?offset=${offset}&limit=${limit}`, { cache: "no-store" });
     const result = await response.json();
     if (result.status !== "success") {
       setStatusMessage(result.message ?? "Não foi possível carregar as conversas.");
       setIsLoading(false);
+      setIsLoadingMore(false);
       return;
     }
 
     const nextPayload = result.data as ConversationPayload;
-    setPayload(nextPayload);
+    setPayload((current) => {
+      if (reset || !current) {
+        return nextPayload;
+      }
 
-    const nextSelectedId = preferredId ?? selectedId ?? nextPayload.conversations[0]?.id ?? null;
+      return {
+        users: nextPayload.users,
+        conversations: {
+          ...nextPayload.conversations,
+          items: [...current.conversations.items, ...nextPayload.conversations.items],
+        },
+      };
+    });
+
+    const baseItems = reset || !payload
+      ? nextPayload.conversations.items
+      : [...(payload?.conversations.items ?? []), ...nextPayload.conversations.items];
+    const nextSelectedId = params?.preferredId ?? selectedId ?? baseItems[0]?.id ?? null;
     setSelectedId(nextSelectedId);
 
     if (nextSelectedId) {
@@ -104,6 +146,7 @@ export function ConversationCenter() {
     }
 
     setIsLoading(false);
+    setIsLoadingMore(false);
   }
 
   async function loadDetail(conversationId: string) {
@@ -116,7 +159,7 @@ export function ConversationCenter() {
   }
 
   useEffect(() => {
-    void loadConversations();
+    void loadConversations({ reset: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -128,7 +171,12 @@ export function ConversationCenter() {
     });
 
     source.addEventListener("conversation-update", () => {
-      void loadConversations(selectedId);
+      void loadConversations({
+        preferredId: selectedId,
+        reset: true,
+        silent: true,
+        limitOverride: Math.max(payload?.conversations.items.length ?? PAGE_SIZE, PAGE_SIZE),
+      });
     });
 
     source.onerror = () => {
@@ -138,7 +186,22 @@ export function ConversationCenter() {
     return () => {
       source.close();
     };
-  }, [selectedId]);
+  }, [payload?.conversations.items.length, selectedId]);
+
+  useEffect(() => {
+    const node = loadMoreRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (!entry?.isIntersecting) return;
+      if (isLoading || isLoadingMore || !payload?.conversations.hasMore) return;
+      void loadConversations();
+    }, { rootMargin: "120px" });
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [isLoading, isLoadingMore, payload?.conversations.hasMore]);
 
   useEffect(() => {
     return () => {
@@ -149,7 +212,7 @@ export function ConversationCenter() {
   }, [audioPreviewUrl]);
 
   const filteredConversations = useMemo(() => {
-    const list = payload?.conversations ?? [];
+    const list = payload?.conversations.items ?? [];
     const term = search.trim().toLowerCase();
     if (!term) return list;
 
@@ -179,7 +242,7 @@ export function ConversationCenter() {
     });
     const result = await response.json();
     setStatusMessage(result.message ?? null);
-    await loadConversations(detail.id);
+    await loadConversations({ preferredId: detail.id, reset: true, limitOverride: Math.max(payload?.conversations.items.length ?? PAGE_SIZE, PAGE_SIZE) });
   }
 
   async function assignOwner(ownerUserId: string) {
@@ -191,7 +254,7 @@ export function ConversationCenter() {
     });
     const result = await response.json();
     setStatusMessage(result.message ?? null);
-    await loadConversations(detail.id);
+    await loadConversations({ preferredId: detail.id, reset: true, limitOverride: Math.max(payload?.conversations.items.length ?? PAGE_SIZE, PAGE_SIZE) });
   }
 
   async function saveTags(tags: string[]) {
@@ -205,7 +268,7 @@ export function ConversationCenter() {
     const result = await response.json();
     setStatusMessage(result.message ?? null);
     setCustomTag("");
-    await loadConversations(detail.id);
+    await loadConversations({ preferredId: detail.id, reset: true, limitOverride: Math.max(payload?.conversations.items.length ?? PAGE_SIZE, PAGE_SIZE) });
     setIsSavingTags(false);
   }
 
@@ -225,7 +288,7 @@ export function ConversationCenter() {
     setStatusMessage(result.message ?? null);
     setMessage("");
     clearSelectedMedia();
-    await loadConversations(detail.id);
+    await loadConversations({ preferredId: detail.id, reset: true, limitOverride: Math.max(payload?.conversations.items.length ?? PAGE_SIZE, PAGE_SIZE) });
     setIsSending(false);
   }
 
@@ -258,7 +321,7 @@ export function ConversationCenter() {
     if (result.status === "success" && result.data?.id) {
       setIsCreateOpen(false);
       setCreateForm({ phone: "", leadName: "", firstMessage: "", ownerUserId: "" });
-      await loadConversations(result.data.id);
+      await loadConversations({ preferredId: result.data.id, reset: true });
     }
   }
 
@@ -368,6 +431,8 @@ export function ConversationCenter() {
             {!isLoading && !filteredConversations.length ? (
               <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Nenhuma conversa encontrada.</div>
             ) : null}
+            {!search && payload?.conversations.hasMore ? <div ref={loadMoreRef} className="h-6" /> : null}
+            {isLoadingMore ? <p className="text-center text-xs text-muted-foreground">Carregando mais conversas...</p> : null}
           </CardContent>
         </Card>
 

@@ -13,10 +13,16 @@ export class ConversationService {
     private readonly zapiService = new ZapiService(),
   ) {}
 
-  async list() {
-    const conversations = await this.chatbotRepository.listConversations();
+  async list(params?: { offset?: number; limit?: number }) {
+    const [conversations, total] = await Promise.all([
+      this.chatbotRepository.listConversations({
+        skip: params?.offset ?? 0,
+        take: params?.limit ?? 25,
+      }),
+      this.chatbotRepository.countConversations(),
+    ]);
 
-    return conversations.map((conversation) => {
+    const items = conversations.map((conversation) => {
       const memory = this.parseMemory(conversation.memory);
       const lastMessage = conversation.messages[0] ?? null;
 
@@ -46,6 +52,14 @@ export class ConversationService {
         })),
       };
     });
+
+    return {
+      items,
+      total,
+      offset: params?.offset ?? 0,
+      limit: params?.limit ?? 25,
+      hasMore: (params?.offset ?? 0) + items.length < total,
+    };
   }
 
   async getDetail(conversationId: string) {

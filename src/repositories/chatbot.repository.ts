@@ -212,7 +212,13 @@ export class ChatbotRepository {
     });
   }
 
-  async listConversations() {
+  async countConversations() {
+    return prisma.chatConversation.count({
+      where: { deletedAt: null },
+    });
+  }
+
+  async listConversations(params?: { skip?: number; take?: number }) {
     return prisma.chatConversation.findMany({
       where: { deletedAt: null },
       include: {
@@ -225,6 +231,8 @@ export class ChatbotRepository {
         },
       },
       orderBy: { updatedAt: "desc" },
+      skip: params?.skip ?? 0,
+      take: params?.take ?? 25,
     });
   }
 
