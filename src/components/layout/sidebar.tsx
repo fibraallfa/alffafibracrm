@@ -23,14 +23,29 @@ export function Sidebar() {
         </div>
         <nav className="flex-1 space-y-1 px-3 py-4">
           {visibleItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 hover:text-white"
-            >
-              <item.icon className="h-4 w-4" aria-hidden="true" />
-              {item.title}
-            </Link>
+            "comingSoon" in item && item.comingSoon ? (
+              <div
+                key={item.href}
+                className="flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium text-slate-400"
+              >
+                <span className="flex items-center gap-3">
+                  <item.icon className="h-4 w-4" aria-hidden="true" />
+                  {item.title}
+                </span>
+                <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
+                  Em breve
+                </span>
+              </div>
+            ) : (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <item.icon className="h-4 w-4" aria-hidden="true" />
+                {item.title}
+              </Link>
+            )
           ))}
         </nav>
         <div className="border-t border-white/10 p-4">
