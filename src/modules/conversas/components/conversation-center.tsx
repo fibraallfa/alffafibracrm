@@ -133,7 +133,7 @@ export function ConversationCenter() {
       return;
     }
 
-    const nextPayload = result.data as ConversationPayload;
+    const nextPayload = normalizeConversationPayload(result.data);
     setPayload((current) => {
       if (reset || !current) {
         return nextPayload;
@@ -170,7 +170,7 @@ export function ConversationCenter() {
     const response = await fetch(`/api/conversations?conversationId=${conversationId}`, { cache: "no-store" });
     const result = await response.json();
     if (result.status === "success") {
-      setDetail(result.data as ConversationDetail | null);
+      setDetail(result.data ? normalizeConversationDetail(result.data) : null);
       setSelectedId(conversationId);
     }
   }
@@ -700,7 +700,102 @@ export function ConversationCenter() {
 }
 
 function formatTime(value: string) {
-  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "--:--";
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function normalizeConversationPayload(payload: unknown): ConversationPayload {
+  const raw = (payload && typeof payload === "object") ? payload as Partial<ConversationPayload> : {};
+  const rawConversations = (raw.conversations && typeof raw.conversations === "object")
+    ? raw.conversations as Partial<ConversationPayload["conversations"]>
+    : undefined;
+  const rawItems = rawConversations?.items;
+
+  return {
+    users: Array.isArray(raw.users) ? raw.users : [],
+    conversations: {
+      items: Array.isArray(rawItems)
+        ? rawItems.map((conversation) => normalizeConversationListItem(conversation))
+        : [],
+      total: typeof rawConversations?.total === "number" ? rawConversations.total : 0,
+      offset: typeof rawConversations?.offset === "number" ? rawConversations.offset : 0,
+      limit: typeof rawConversations?.limit === "number" ? rawConversations.limit : PAGE_SIZE,
+      hasMore: Boolean(rawConversations?.hasMore),
+    },
+  };
+}
+
+function normalizeConversationListItem(conversation: unknown): ConversationListItem {
+  const raw = (conversation && typeof conversation === "object") ? conversation as Partial<ConversationListItem> : {};
+
+  return {
+    id: typeof raw.id === "string" ? raw.id : "",
+    phone: typeof raw.phone === "string" ? raw.phone : "",
+    state: typeof raw.state === "string" ? raw.state : "",
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : "",
+    lead: raw.lead && typeof raw.lead === "object" ? raw.lead : null,
+    agent: raw.agent && typeof raw.agent === "object" ? raw.agent : null,
+    owner: raw.owner && typeof raw.owner === "object" ? raw.owner : null,
+    tags: normalizeTags(raw.tags),
+    botActive: Boolean(raw.botActive),
+    hasPendingCustomerMessage: Boolean(raw.hasPendingCustomerMessage),
+    lastMessage: raw.lastMessage && typeof raw.lastMessage === "object" ? raw.lastMessage : null,
+    messages: Array.isArray(raw.messages) ? raw.messages.filter(Boolean) : [],
+  };
+}
+
+function normalizeConversationDetail(detail: unknown): ConversationDetail {
+  const raw = (detail && typeof detail === "object") ? detail as Partial<ConversationDetail> : {};
+
+  return {
+    id: typeof raw.id === "string" ? raw.id : "",
+    phone: typeof raw.phone === "string" ? raw.phone : "",
+    state: typeof raw.state === "string" ? raw.state : "",
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : "",
+    lead: raw.lead && typeof raw.lead === "object" ? raw.lead : null,
+    agent: raw.agent && typeof raw.agent === "object" ? raw.agent : null,
+    owner: raw.owner && typeof raw.owner === "object" ? raw.owner : null,
+    ownerUserId: typeof raw.ownerUserId === "string" ? raw.ownerUserId : null,
+    tags: normalizeTags(raw.tags),
+    memory: raw.memory && typeof raw.memory === "object" && !Array.isArray(raw.memory) ? raw.memory : {},
+    botActive: Boolean(raw.botActive),
+    messages: Array.isArray(raw.messages) ? raw.messages.filter(Boolean) : [],
+  };
+}
+
+function normalizeTags(tags: unknown): ConversationTag[] {
+  if (!Array.isArray(tags)) {
+    return [];
+  }
+
+  return tags
+    .map((tag) => normalizeTag(tag))
+    .filter((tag): tag is ConversationTag => Boolean(tag));
+}
+
+function normalizeTag(tag: unknown): ConversationTag | null {
+  if (typeof tag === "string") {
+    const label = tag.trim();
+    return label ? { label, color: "sky" } : null;
+  }
+
+  if (!tag || typeof tag !== "object" || Array.isArray(tag)) {
+    return null;
+  }
+
+  const raw = tag as Partial<ConversationTag>;
+  const label = typeof raw.label === "string" ? raw.label.trim() : "";
+  const color = typeof raw.color === "string" && raw.color.trim() ? raw.color.trim() : "sky";
+
+  if (!label) {
+    return null;
+  }
+
+  return { label, color };
 }
 
 function tagClasses(color: string) {
