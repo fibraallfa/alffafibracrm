@@ -110,6 +110,10 @@ export class ChatbotEngineService {
       });
     }
 
+    if (conversation.ownerUserId) {
+      return { state: conversation.state, replied: false, delayMs: 0 };
+    }
+
     if (input.providerId) {
       await this.zapiService.markAsRead(input.providerId, phone, agentConfig(agent));
     }

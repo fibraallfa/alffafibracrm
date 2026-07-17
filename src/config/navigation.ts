@@ -2,6 +2,7 @@ import {
   BarChart3,
   Bot,
   CalendarCheck,
+  MessageCircleMore,
   ReceiptText,
   MapPinned,
   Settings,
@@ -12,6 +13,7 @@ import { permissions } from "@/constants/permissions";
 
 export const navigationItems = [
   { title: "Dashboard", href: "/dashboard", icon: BarChart3, permission: permissions.dashboardView },
+  { title: "Conversas", href: "/conversas", icon: MessageCircleMore, permission: permissions.agentsEdit },
   { title: "Leads", href: "/leads", icon: Users, permission: permissions.leadsView },
   { title: "Compromissos", href: "/compromissos", icon: CalendarCheck, permission: permissions.appointmentsView },
   { title: "Despesas", href: "/despesas", icon: ReceiptText, permission: permissions.expensesView },

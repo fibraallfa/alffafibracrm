@@ -8,6 +8,11 @@ type SendTextInput = {
   config?: Partial<ZapiConfig>;
 };
 
+type SendMediaInput = {
+  phone: string;
+  config?: Partial<ZapiConfig>;
+};
+
 type ZapiConfig = Awaited<ReturnType<typeof getZapiRuntimeConfig>>;
 
 export class ZapiService {
@@ -68,6 +73,60 @@ export class ZapiService {
     }
 
     throw new Error("Falha ao enviar mensagem pela Z-API.");
+  }
+
+  async sendImage({ phone, image, caption, config }: SendMediaInput & { image: string; caption?: string }) {
+    return this.post("send-image", { phone, image, caption }, config);
+  }
+
+  async sendDocument({ phone, document, fileName, caption, config }: SendMediaInput & { document: string; fileName: string; caption?: string }) {
+    return this.post("send-document", { phone, document, fileName, caption }, config);
+  }
+
+  async sendAudio({ phone, audio, config }: SendMediaInput & { audio: string }) {
+    return this.post("send-audio", { phone, audio }, config);
+  }
+
+  async sendVideo({ phone, video, caption, config }: SendMediaInput & { video: string; caption?: string }) {
+    return this.post("send-video", { phone, video, caption }, config);
+  }
+
+  private async post(action: string, body: Record<string, unknown>, config?: Partial<ZapiConfig>) {
+    const zapiConfig = { ...(await getZapiRuntimeConfig()), ...cleanConfig(config) };
+    if (!zapiConfig.instanceId || !zapiConfig.token) {
+      throw new Error("Z-API nao configurada.");
+    }
+
+    const response = await fetch(
+      `${zapiConfig.baseUrl}/instances/${zapiConfig.instanceId}/token/${zapiConfig.token}/${action}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(zapiConfig.clientToken ? { "Client-Token": zapiConfig.clientToken } : {}),
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(20_000),
+      },
+    );
+
+    if (response.ok) {
+      return response.json().catch(() => null);
+    }
+
+    const responseBody = await response.text();
+    await writeTechnicalLog({
+      level: "ERROR",
+      category: "integration",
+      message: `Falha ao enviar mídia pela Z-API (${action}).`,
+      method: "POST",
+      endpoint: action,
+      statusCode: response.status,
+      integration: "zapi",
+      metadata: { response: responseBody.slice(0, 500) },
+    });
+
+    throw new Error("Falha ao enviar mídia pela Z-API.");
   }
 
   private async optionalPost(action: string, body: Record<string, string>, config?: Partial<ZapiConfig>) {

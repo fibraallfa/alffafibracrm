@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { publishConversationEvent } from "@/server/realtime/conversation-events";
 
 export class ChatbotRepository {
   async findMessageByProviderId(providerId: string) {
@@ -25,7 +26,7 @@ export class ChatbotRepository {
   async findOrCreateConversation(phone: string, agentId?: string) {
     const existing = await prisma.chatConversation.findFirst({
       where: { phone, agentId: agentId ?? undefined, deletedAt: null },
-      include: { messages: { orderBy: { createdAt: "desc" }, take: 10 } },
+      include: { messages: { orderBy: { createdAt: "desc" }, take: 10 }, owner: true, lead: true, agent: true },
     });
 
     if (existing) {
@@ -34,7 +35,7 @@ export class ChatbotRepository {
 
     return prisma.chatConversation.create({
       data: { phone, agentId, state: "START", memory: {} },
-      include: { messages: true },
+      include: { messages: true, owner: true, lead: true, agent: true },
     });
   }
 
@@ -43,11 +44,24 @@ export class ChatbotRepository {
     direction: "inbound" | "outbound";
     body: string;
     providerId?: string;
+    sentAt?: Date;
     rawPayload?: Prisma.InputJsonValue;
   }) {
-    return prisma.chatMessage.create({
+    const message = await prisma.chatMessage.create({
       data: input,
     });
+
+    await prisma.chatConversation.update({
+      where: { id: input.conversationId },
+      data: { updatedAt: new Date() },
+    });
+
+    await publishConversationEvent({
+      conversationId: input.conversationId,
+      type: input.direction === "inbound" ? "inbound_message" : "outbound_message",
+    });
+
+    return message;
   }
 
   async claimInboundMessage(input: {
@@ -63,6 +77,14 @@ export class ChatbotRepository {
           direction: "inbound",
         },
       });
+      await prisma.chatConversation.update({
+        where: { id: input.conversationId },
+        data: { updatedAt: new Date() },
+      });
+      await publishConversationEvent({
+        conversationId: input.conversationId,
+        type: "inbound_message",
+      });
       return true;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -77,15 +99,24 @@ export class ChatbotRepository {
     state: string;
     memory: Prisma.InputJsonValue;
     leadId?: string;
+    ownerUserId?: string | null;
   }) {
-    return prisma.chatConversation.update({
+    const conversation = await prisma.chatConversation.update({
       where: { id: input.id },
       data: {
         state: input.state,
         memory: input.memory,
         leadId: input.leadId,
+        ownerUserId: input.ownerUserId,
       },
     });
+
+    await publishConversationEvent({
+      conversationId: input.id,
+      type: "conversation_updated",
+    });
+
+    return conversation;
   }
 
   async createLeadFromChat(input: {
@@ -187,13 +218,84 @@ export class ChatbotRepository {
       include: {
         lead: true,
         agent: true,
+        owner: true,
         messages: {
           orderBy: { createdAt: "desc" },
           take: 3,
         },
       },
       orderBy: { updatedAt: "desc" },
-      take: 50,
+    });
+  }
+
+  async getConversationById(id: string) {
+    return prisma.chatConversation.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        lead: true,
+        agent: true,
+        owner: true,
+        messages: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+  }
+
+  async assignConversationOwner(conversationId: string, ownerUserId: string | null) {
+    const conversation = await prisma.chatConversation.update({
+      where: { id: conversationId },
+      data: { ownerUserId },
+    });
+
+    await publishConversationEvent({
+      conversationId,
+      type: ownerUserId ? "conversation_assumed" : "conversation_returned",
+    });
+
+    return conversation;
+  }
+
+  async updateConversationMemory(conversationId: string, memory: Prisma.InputJsonValue) {
+    const conversation = await prisma.chatConversation.update({
+      where: { id: conversationId },
+      data: { memory },
+    });
+
+    await publishConversationEvent({
+      conversationId,
+      type: "conversation_updated",
+    });
+
+    return conversation;
+  }
+
+  async touchConversation(conversationId: string) {
+    const conversation = await prisma.chatConversation.update({
+      where: { id: conversationId },
+      data: { updatedAt: new Date() },
+    });
+
+    await publishConversationEvent({
+      conversationId,
+      type: "conversation_updated",
+    });
+
+    return conversation;
+  }
+
+  async listAssignableUsers() {
+    return prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        status: "ACTIVE",
+      },
+      orderBy: [{ role: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        role: true,
+      },
     });
   }
 }
