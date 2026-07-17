@@ -252,11 +252,14 @@ export function OverviewPanel() {
         <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{overview.error}</div>
       ) : null}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <MetricHighlight title="Leads criados" value={formatNumber(data?.summary.leadsCreated)} helper="oportunidades no período" icon={TrendingUp} tone="blue" />
-        <MetricHighlight title="Receita vendida" value={currency.format(data?.summary.revenue ?? 0)} helper={`${formatNumber(data?.summary.leadsWon)} vendas fechadas`} icon={CircleDollarSign} tone="emerald" />
-        <MetricHighlight title="Conversas finalizadas" value={formatNumber(data?.summary.conversationsFinished)} helper={`${formatNumber(data?.summary.conversationsAssumed)} assumidas por humanos`} icon={MessageCircleMore} tone="violet" />
-        <MetricHighlight title="Tarefas concluídas" value={formatNumber(data?.summary.tasksCompleted)} helper={currency.format(data?.summary.expensesTotal ?? 0) + " em despesas no período"} icon={CheckCircle2} tone="amber" />
+        <MetricHighlight title="Leads ganhos" value={formatNumber(data?.summary.leadsWon)} helper="vendas concluídas no período" icon={CheckCircle2} tone="emerald" />
+        <MetricHighlight title="Receita vendida" value={currency.format(data?.summary.revenue ?? 0)} helper="somando todos os planos fechados" icon={CircleDollarSign} tone="emerald" />
+        <MetricHighlight title="Conversas finalizadas" value={formatNumber(data?.summary.conversationsFinished)} helper={`${formatNumber(data?.summary.conversationsBotActive)} ainda com a Cris ativa`} icon={MessageCircleMore} tone="violet" />
+        <MetricHighlight title="Conversas assumidas" value={formatNumber(data?.summary.conversationsAssumed)} helper="atendidas manualmente pela equipe" icon={UserSquare2} tone="violet" />
+        <MetricHighlight title="Tarefas concluídas" value={formatNumber(data?.summary.tasksCompleted)} helper="compromissos marcados como concluídos" icon={CalendarDays} tone="amber" />
+        <MetricHighlight title="Despesas do período" value={currency.format(data?.summary.expensesTotal ?? 0)} helper={`${currency.format(data?.summary.expensesPending ?? 0)} ainda pendentes`} icon={Wallet} tone="amber" />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.55fr_1fr]">
