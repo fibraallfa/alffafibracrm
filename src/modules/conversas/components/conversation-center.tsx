@@ -450,9 +450,9 @@ export function ConversationCenter() {
           </CardContent>
         </Card>
 
-        <Card className="min-h-[76vh]">
+        <Card className="h-[76vh] overflow-hidden">
           {!detail ? (
-            <CardContent className="flex min-h-[76vh] items-center justify-center text-sm text-muted-foreground">
+            <CardContent className="flex h-full items-center justify-center text-sm text-muted-foreground">
               Selecione uma conversa para começar.
             </CardContent>
           ) : (
@@ -521,8 +521,8 @@ export function ConversationCenter() {
                 </div>
               </CardHeader>
 
-              <CardContent className="flex min-h-[56vh] flex-col">
-                <div className="flex-1 space-y-3 overflow-y-auto py-4">
+              <CardContent className="flex h-[calc(76vh-210px)] flex-col">
+                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto py-4">
                   {detail.messages.map((messageItem) => (
                     <div key={messageItem.id} className={`flex ${messageItem.direction === "inbound" ? "justify-start" : "justify-end"}`}>
                       <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${messageItem.direction === "inbound" ? "bg-muted" : "bg-alffa-navy text-white"}`}>
