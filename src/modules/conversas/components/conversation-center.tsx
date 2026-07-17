@@ -88,7 +88,7 @@ export function ConversationCenter() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const conversationListRef = useRef<HTMLDivElement | null>(null);
 
   async function loadConversations(params?: {
     preferredId?: string | null;
@@ -189,21 +189,6 @@ export function ConversationCenter() {
   }, [payload?.conversations.items.length, selectedId]);
 
   useEffect(() => {
-    const node = loadMoreRef.current;
-    if (!node) return;
-
-    const observer = new IntersectionObserver((entries) => {
-      const entry = entries[0];
-      if (!entry?.isIntersecting) return;
-      if (isLoading || isLoadingMore || !payload?.conversations.hasMore) return;
-      void loadConversations();
-    }, { rootMargin: "120px" });
-
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [isLoading, isLoadingMore, payload?.conversations.hasMore]);
-
-  useEffect(() => {
     return () => {
       mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -231,6 +216,18 @@ export function ConversationCenter() {
         .includes(term),
     );
   }, [payload, search]);
+
+  async function handleConversationListScroll() {
+    const node = conversationListRef.current;
+    if (!node || search.trim()) return;
+    if (isLoading || isLoadingMore || !payload?.conversations.hasMore) return;
+
+    const distanceToBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+
+    if (distanceToBottom <= 180) {
+      await loadConversations();
+    }
+  }
 
   async function toggleControl() {
     if (!detail) return;
@@ -395,44 +392,51 @@ export function ConversationCenter() {
       ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
-        <Card className="min-h-[76vh]">
+        <Card className="h-[76vh] overflow-hidden">
           <CardHeader>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
               <Input className="pl-9" placeholder="Pesquisar conversa, número ou etiqueta" value={search} onChange={(event) => setSearch(event.target.value)} />
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {isLoading ? <p className="text-sm text-muted-foreground">Carregando conversas...</p> : null}
-            {filteredConversations.map((conversation) => (
-              <button
-                key={conversation.id}
-                type="button"
-                onClick={() => void loadDetail(conversation.id)}
-                className={`w-full rounded-lg border p-3 text-left transition ${selectedId === conversation.id ? "border-cyan-500 bg-cyan-50" : "hover:bg-muted/40"}`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{conversation.lead?.name ?? conversation.phone}</p>
-                    <p className="text-xs text-muted-foreground">{conversation.phone}</p>
+          <CardContent className="h-[calc(76vh-88px)]">
+            <div
+              ref={conversationListRef}
+              className="h-full space-y-3 overflow-y-auto"
+              onScroll={() => {
+                void handleConversationListScroll();
+              }}
+            >
+              {isLoading ? <p className="text-sm text-muted-foreground">Carregando conversas...</p> : null}
+              {filteredConversations.map((conversation) => (
+                <button
+                  key={conversation.id}
+                  type="button"
+                  onClick={() => void loadDetail(conversation.id)}
+                  className={`w-full rounded-lg border p-3 text-left transition ${selectedId === conversation.id ? "border-cyan-500 bg-cyan-50" : "hover:bg-muted/40"}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{conversation.lead?.name ?? conversation.phone}</p>
+                      <p className="text-xs text-muted-foreground">{conversation.phone}</p>
+                    </div>
+                    <span className="text-[11px] text-muted-foreground">{formatTime(conversation.updatedAt)}</span>
                   </div>
-                  <span className="text-[11px] text-muted-foreground">{formatTime(conversation.updatedAt)}</span>
-                </div>
-                <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{conversation.lastMessage?.body ?? "Sem mensagens ainda"}</p>
-                <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-                  <span className={`rounded-full px-2 py-1 ${conversation.botActive ? "bg-emerald-100 text-emerald-700" : "bg-orange-100 text-orange-700"}`}>
-                    {conversation.botActive ? "Cris ativa" : "Assumida"}
-                  </span>
-                  <span className="rounded-full bg-muted px-2 py-1">{conversation.state}</span>
-                  {conversation.owner ? <span className="rounded-full bg-slate-900 px-2 py-1 text-white">{conversation.owner.name}</span> : null}
-                </div>
-              </button>
-            ))}
-            {!isLoading && !filteredConversations.length ? (
-              <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Nenhuma conversa encontrada.</div>
-            ) : null}
-            {!search && payload?.conversations.hasMore ? <div ref={loadMoreRef} className="h-6" /> : null}
-            {isLoadingMore ? <p className="text-center text-xs text-muted-foreground">Carregando mais conversas...</p> : null}
+                  <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{conversation.lastMessage?.body ?? "Sem mensagens ainda"}</p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                    <span className={`rounded-full px-2 py-1 ${conversation.botActive ? "bg-emerald-100 text-emerald-700" : "bg-orange-100 text-orange-700"}`}>
+                      {conversation.botActive ? "Cris ativa" : "Assumida"}
+                    </span>
+                    <span className="rounded-full bg-muted px-2 py-1">{conversation.state}</span>
+                    {conversation.owner ? <span className="rounded-full bg-slate-900 px-2 py-1 text-white">{conversation.owner.name}</span> : null}
+                  </div>
+                </button>
+              ))}
+              {!isLoading && !filteredConversations.length ? (
+                <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">Nenhuma conversa encontrada.</div>
+              ) : null}
+              {isLoadingMore ? <p className="text-center text-xs text-muted-foreground">Carregando mais conversas...</p> : null}
+            </div>
           </CardContent>
         </Card>
 
