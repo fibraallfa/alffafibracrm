@@ -3,9 +3,16 @@ import { ChatbotRepository } from "@/repositories/chatbot.repository";
 import { ZapiService } from "@/services/zapi/zapi.service";
 
 type ConversationMemory = {
-  tags?: string[];
+  tags?: ConversationTag[];
   [key: string]: unknown;
 };
+
+export type ConversationTag = {
+  label: string;
+  color: string;
+};
+
+const DEFAULT_TAG_COLOR = "sky";
 
 export class ConversationService {
   constructor(
@@ -123,7 +130,7 @@ export class ConversationService {
     return this.getDetail(conversationId);
   }
 
-  async updateTags(conversationId: string, tags: string[]) {
+  async updateTags(conversationId: string, tags: ConversationTag[]) {
     const detail = await this.getDetail(conversationId);
     if (!detail) {
       throw new Error("Conversa não encontrada.");
@@ -244,13 +251,27 @@ export class ConversationService {
     return this.getDetail(conversation.id);
   }
 
+  async deleteConversation(conversationId: string) {
+    const detail = await this.getDetail(conversationId);
+    if (!detail) {
+      throw new Error("Conversa não encontrada.");
+    }
+
+    await this.chatbotRepository.softDeleteConversation(conversationId);
+    return { success: true };
+  }
+
   private parseMemory(memory: unknown): ConversationMemory {
     if (!memory || typeof memory !== "object" || Array.isArray(memory)) {
       return {};
     }
 
     const record = memory as Record<string, unknown>;
-    const tags = Array.isArray(record.tags) ? record.tags.filter((tag): tag is string => typeof tag === "string") : [];
+    const tags = Array.isArray(record.tags)
+      ? record.tags
+          .map((tag) => normalizeTag(tag))
+          .filter((tag): tag is ConversationTag => Boolean(tag))
+      : [];
     return {
       ...record,
       tags,
@@ -258,8 +279,38 @@ export class ConversationService {
   }
 }
 
-function normalizeTags(tags: string[]) {
-  return Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean))).slice(0, 20);
+function normalizeTags(tags: ConversationTag[]) {
+  const unique = new Map<string, ConversationTag>();
+
+  for (const tag of tags) {
+    const normalized = normalizeTag(tag);
+    if (!normalized) continue;
+    unique.set(normalized.label.toLowerCase(), normalized);
+  }
+
+  return Array.from(unique.values()).slice(0, 20);
+}
+
+function normalizeTag(tag: unknown): ConversationTag | null {
+  if (typeof tag === "string") {
+    const label = tag.trim();
+    return label ? { label, color: DEFAULT_TAG_COLOR } : null;
+  }
+
+  if (!tag || typeof tag !== "object" || Array.isArray(tag)) {
+    return null;
+  }
+
+  const record = tag as Record<string, unknown>;
+  const label = typeof record.label === "string" ? record.label.trim() : "";
+  const color = typeof record.color === "string" && record.color.trim() ? record.color.trim() : DEFAULT_TAG_COLOR;
+
+  if (!label) return null;
+
+  return {
+    label,
+    color,
+  };
 }
 
 function agentConfig(agent?: {

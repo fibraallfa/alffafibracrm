@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Mic, Paperclip, Plus, Search, Send, Square, UserCheck, Undo2, X } from "lucide-react";
+import { Mic, Paintbrush, Paperclip, Plus, Search, Send, Square, Trash2, UserCheck, Undo2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,11 @@ type ConversationUser = {
   role: "ADMIN" | "EMPLOYEE";
 };
 
+type ConversationTag = {
+  label: string;
+  color: string;
+};
+
 type ConversationListItem = {
   id: string;
   phone: string;
@@ -23,7 +28,7 @@ type ConversationListItem = {
   lead: { id: string; name: string } | null;
   agent: { id: string; name: string } | null;
   owner: ConversationUser | null;
-  tags: string[];
+  tags: ConversationTag[];
   botActive: boolean;
   hasPendingCustomerMessage: boolean;
   lastMessage: { id: string; direction: string; body: string; createdAt: string } | null;
@@ -46,7 +51,7 @@ type ConversationDetail = {
   agent: { id: string; name: string } | null;
   owner: ConversationUser | null;
   ownerUserId: string | null;
-  tags: string[];
+  tags: ConversationTag[];
   memory: Record<string, unknown>;
   botActive: boolean;
   messages: Array<{ id: string; direction: string; body: string; createdAt: string }>;
@@ -65,6 +70,14 @@ type ConversationPayload = {
 
 const TAG_SUGGESTIONS = ["Novo lead", "Prioridade", "Retorno", "Instalação", "Venda", "Sem viabilidade"];
 const PAGE_SIZE = 20;
+const TAG_COLORS = [
+  { value: "sky", label: "Azul" },
+  { value: "emerald", label: "Verde" },
+  { value: "amber", label: "Amarelo" },
+  { value: "rose", label: "Rosa" },
+  { value: "violet", label: "Roxo" },
+  { value: "slate", label: "Cinza" },
+];
 
 export function ConversationCenter() {
   const { data: currentUser } = useCurrentUser();
@@ -74,6 +87,7 @@ export function ConversationCenter() {
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
   const [customTag, setCustomTag] = useState("");
+  const [customTagColor, setCustomTagColor] = useState("sky");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -137,7 +151,9 @@ export function ConversationCenter() {
     const baseItems = reset || !payload
       ? nextPayload.conversations.items
       : [...(payload?.conversations.items ?? []), ...nextPayload.conversations.items];
-    const nextSelectedId = params?.preferredId ?? selectedId ?? baseItems[0]?.id ?? null;
+    const nextSelectedId = params && "preferredId" in params
+      ? (params.preferredId ?? baseItems[0]?.id ?? null)
+      : (selectedId ?? baseItems[0]?.id ?? null);
     setSelectedId(nextSelectedId);
 
     if (nextSelectedId) {
@@ -209,7 +225,7 @@ export function ConversationCenter() {
         conversation.lead?.name,
         conversation.owner?.name,
         conversation.lastMessage?.body,
-        ...conversation.tags,
+        ...conversation.tags.map((tag) => tag.label),
       ]
         .filter(Boolean)
         .join(" ")
@@ -256,18 +272,25 @@ export function ConversationCenter() {
   }
 
   async function saveTags(tags: string[]) {
+    await saveTagObjects(tags.map((tag) => ({ label: tag, color: "sky" })));
+  }
+
+  async function saveTagObjects(tags: ConversationTag[]) {
     if (!detail) return;
     setIsSavingTags(true);
-    const response = await fetch("/api/conversations/tags", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversationId: detail.id, tags }),
-    });
-    const result = await response.json();
-    setStatusMessage(result.message ?? null);
-    setCustomTag("");
-    await loadConversations({ preferredId: detail.id, reset: true, limitOverride: Math.max(payload?.conversations.items.length ?? PAGE_SIZE, PAGE_SIZE) });
-    setIsSavingTags(false);
+    try {
+      const response = await fetch("/api/conversations/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId: detail.id, tags }),
+      });
+      const result = await response.json();
+      setStatusMessage(result.message ?? null);
+      setCustomTag("");
+      await loadConversations({ preferredId: detail.id, reset: true, limitOverride: Math.max(payload?.conversations.items.length ?? PAGE_SIZE, PAGE_SIZE) });
+    } finally {
+      setIsSavingTags(false);
+    }
   }
 
   async function sendMessage() {
@@ -369,6 +392,20 @@ export function ConversationCenter() {
     }
   }
 
+  async function deleteConversation() {
+    if (!detail) return;
+    if (!window.confirm("Tem certeza que deseja excluir esta conversa?")) return;
+
+    const response = await fetch(`/api/conversations/${detail.id}`, {
+      method: "DELETE",
+    });
+    const result = await response.json();
+    setStatusMessage(result.message ?? null);
+    setDetail(null);
+    setSelectedId(null);
+    await loadConversations({ reset: true, preferredId: null });
+  }
+
   return (
     <div className="space-y-4">
       <Card>
@@ -438,6 +475,11 @@ export function ConversationCenter() {
                       {conversation.botActive ? "Cris ativa" : "Assumida"}
                     </span>
                     <span className="rounded-full bg-muted px-2 py-1">{conversation.state}</span>
+                    {conversation.tags.map((tag) => (
+                      <span key={`${conversation.id}-${tag.label}`} className={`rounded-full px-2 py-1 ${tagClasses(tag.color)}`}>
+                        {tag.label}
+                      </span>
+                    ))}
                     {conversation.owner ? <span className="rounded-full bg-slate-900 px-2 py-1 text-white">{conversation.owner.name}</span> : null}
                   </div>
                 </button>
@@ -482,25 +524,43 @@ export function ConversationCenter() {
                       {detail.botActive ? <UserCheck className="h-4 w-4" /> : <Undo2 className="h-4 w-4" />}
                       {detail.botActive ? "Assumir" : "Devolver"}
                     </Button>
+                    <Button type="button" variant="outline" onClick={() => void deleteConversation()}>
+                      <Trash2 className="h-4 w-4" />
+                      Excluir
+                    </Button>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
                   {detail.tags.map((tag) => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => void saveTags(detail.tags.filter((item) => item !== tag))}
-                      className="rounded-full bg-cyan-100 px-3 py-1 text-xs text-cyan-800"
-                    >
-                      {tag} <X className="ml-1 inline h-3 w-3" />
-                    </button>
+                    <div key={tag.label} className="flex items-center gap-1 rounded-full border border-slate-200 bg-white pr-2">
+                      <span className={`rounded-full px-3 py-1 text-xs ${tagClasses(tag.color)}`}>{tag.label}</span>
+                      <div className="flex items-center gap-1">
+                        {TAG_COLORS.map((color) => (
+                          <button
+                            key={`${tag.label}-${color.value}`}
+                            type="button"
+                            className={`h-3 w-3 rounded-full ${tagDotClasses(color.value)} ${tag.color === color.value ? "ring-2 ring-slate-400" : ""}`}
+                            title={`Trocar para ${color.label}`}
+                            onClick={() => void saveTagObjects(detail.tags.map((item) => item.label === tag.label ? { ...item, color: color.value } : item))}
+                          />
+                        ))}
+                        <button
+                          type="button"
+                          className="rounded-full p-0.5 text-slate-500 hover:bg-slate-100"
+                          title="Remover etiqueta"
+                          onClick={() => void saveTagObjects(detail.tags.filter((item) => item.label !== tag.label))}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
                   ))}
-                  {TAG_SUGGESTIONS.filter((tag) => !detail.tags.includes(tag)).map((tag) => (
+                  {TAG_SUGGESTIONS.filter((tag) => !detail.tags.some((item) => item.label === tag)).map((tag) => (
                     <button
                       key={tag}
                       type="button"
-                      onClick={() => void saveTags([...detail.tags, tag])}
+                      onClick={() => void saveTagObjects([...detail.tags, { label: tag, color: "sky" }])}
                       className="rounded-full border px-3 py-1 text-xs"
                     >
                       + {tag}
@@ -510,12 +570,24 @@ export function ConversationCenter() {
 
                 <div className="flex gap-2">
                   <Input placeholder="Criar etiqueta..." value={customTag} onChange={(event) => setCustomTag(event.target.value)} />
+                  <select
+                    className="h-10 rounded-md border bg-background px-3 text-sm"
+                    value={customTagColor}
+                    onChange={(event) => setCustomTagColor(event.target.value)}
+                  >
+                    {TAG_COLORS.map((color) => (
+                      <option key={color.value} value={color.value}>
+                        {color.label}
+                      </option>
+                    ))}
+                  </select>
                   <Button
                     type="button"
                     variant="outline"
                     disabled={isSavingTags}
-                    onClick={() => customTag.trim() && void saveTags([...detail.tags, customTag])}
+                    onClick={() => customTag.trim() && void saveTagObjects([...detail.tags, { label: customTag, color: customTagColor }])}
                   >
+                    <Paintbrush className="h-4 w-4" />
                     Adicionar
                   </Button>
                 </div>
@@ -629,6 +701,24 @@ export function ConversationCenter() {
 
 function formatTime(value: string) {
   return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function tagClasses(color: string) {
+  if (color === "emerald") return "bg-emerald-100 text-emerald-800";
+  if (color === "amber") return "bg-amber-100 text-amber-800";
+  if (color === "rose") return "bg-rose-100 text-rose-800";
+  if (color === "violet") return "bg-violet-100 text-violet-800";
+  if (color === "slate") return "bg-slate-200 text-slate-800";
+  return "bg-sky-100 text-sky-800";
+}
+
+function tagDotClasses(color: string) {
+  if (color === "emerald") return "bg-emerald-500";
+  if (color === "amber") return "bg-amber-500";
+  if (color === "rose") return "bg-rose-500";
+  if (color === "violet") return "bg-violet-500";
+  if (color === "slate") return "bg-slate-500";
+  return "bg-sky-500";
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {

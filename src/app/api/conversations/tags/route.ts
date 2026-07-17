@@ -13,7 +13,16 @@ export async function POST(request: Request) {
     const user = await requireCurrentUser();
     assertPermission(user, permissions.agentsEdit);
     const body = await request.json();
-    const tags = Array.isArray(body.tags) ? body.tags.map((tag: unknown) => String(tag)) : [];
+    const tags = Array.isArray(body.tags)
+      ? body.tags.map((tag: unknown) =>
+          typeof tag === "string"
+            ? { label: tag, color: "sky" }
+            : {
+                label: String((tag as { label?: unknown })?.label ?? ""),
+                color: String((tag as { color?: unknown })?.color ?? "sky"),
+              },
+        )
+      : [];
     const detail = await conversationService.updateTags(String(body.conversationId ?? ""), tags);
 
     return NextResponse.json(successResponse("Etiquetas atualizadas.", detail));

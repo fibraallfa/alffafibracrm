@@ -306,4 +306,20 @@ export class ChatbotRepository {
       },
     });
   }
+
+  async softDeleteConversation(conversationId: string) {
+    const conversation = await prisma.chatConversation.update({
+      where: { id: conversationId },
+      data: {
+        deletedAt: new Date(),
+      },
+    });
+
+    await publishConversationEvent({
+      conversationId,
+      type: "conversation_deleted",
+    });
+
+    return conversation;
+  }
 }
