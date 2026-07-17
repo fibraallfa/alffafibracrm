@@ -1215,6 +1215,9 @@ function selectPlan(text: string, plans: PlanCandidate[]) {
   });
   if (byName) return byName;
 
+  const byPrice = selectPlanByPrice(text, plans);
+  if (byPrice) return byPrice;
+
   const aliases = [
     { terms: ["250", "duzentos e cinquenta"], chip: false },
     { terms: ["500", "quinhentos"], chip: false },
@@ -1240,6 +1243,41 @@ function selectPlan(text: string, plans: PlanCandidate[]) {
   }
 
   return null;
+}
+
+function selectPlanByPrice(text: string, plans: PlanCandidate[]) {
+  const candidates = extractNumericCandidates(text);
+
+  for (const candidate of candidates) {
+    const exact = plans.find((plan) => approximatelyEqual(Number(plan.price), candidate, 0.11));
+    if (exact) return exact;
+
+    const integerMatch = plans.find((plan) => Math.floor(Number(plan.price)) === Math.floor(candidate));
+    if (integerMatch) return integerMatch;
+
+    const roundedMatch = plans.find((plan) => Math.round(Number(plan.price)) === Math.round(candidate));
+    if (roundedMatch) return roundedMatch;
+  }
+
+  return null;
+}
+
+function extractNumericCandidates(text: string) {
+  const matches = text
+    .replace(/r\$\s*/gi, "")
+    .match(/\d+(?:[.,]\d+)?/g) ?? [];
+
+  return Array.from(
+    new Set(
+      matches
+        .map((value) => Number(value.replace(/\./g, "").replace(",", ".")))
+        .filter((value) => Number.isFinite(value) && value > 0),
+    ),
+  );
+}
+
+function approximatelyEqual(left: number, right: number, tolerance: number) {
+  return Math.abs(left - right) <= tolerance;
 }
 
 function normalizeText(value: string) {
@@ -1319,6 +1357,8 @@ function looksLikeQuestion(text: string) {
 function looksLikeObjection(text: string) {
   const normalized = normalizeText(text);
   return [
+    "nao obrigado",
+    "claro nao",
     "nao tenho interesse",
     "nao quero",
     "nao gostei",
@@ -1332,17 +1372,49 @@ function looksLikeObjection(text: string) {
     "nao preciso",
     "nao quero continuar",
     "sem interesse",
+    "nao concluir pedido",
+    "nao vou concluir",
+    "fala serio",
   ].some((term) => normalized.includes(term));
 }
 
 function looksLikeCancellation(text: string) {
   const normalized = normalizeText(text);
-  return ["cancelar", "cancelamento", "desistir", "desistencia", "encerrar", "parar por aqui"].some((term) => normalized.includes(term));
+  return [
+    "cancelar",
+    "cancelamento",
+    "desistir",
+    "desistencia",
+    "encerrar",
+    "parar por aqui",
+    "nao vou contratar",
+    "nao quero contratar",
+    "nao vou fechar",
+  ].some((term) => normalized.includes(term));
 }
 
 function looksLikeTopicChange(text: string) {
   const normalized = normalizeText(text);
-  return ["plano", "internet", "fibra", "valor", "preco", "preço", "atendente", "consultor", "humano", "cobertura"].some((term) =>
+  return [
+    "plano",
+    "internet",
+    "fibra",
+    "valor",
+    "preco",
+    "preço",
+    "produto",
+    "informacao",
+    "informacoes",
+    "detalhes",
+    "beneficios",
+    "vantagens",
+    "globoplay",
+    "chip",
+    "atendente",
+    "consultor",
+    "humano",
+    "cobertura",
+  ].some((term) =>
     normalized.includes(normalizeText(term)),
   );
 }
@@ -1351,6 +1423,7 @@ function parseFullNameLike(text: string) {
   const normalized = normalizeText(text);
   if (!normalized) return false;
   if (looksLikeObjection(text) || looksLikeCancellation(text) || looksLikeQuestion(text) || looksLikeTopicChange(text)) return false;
+  if (/\b(claro|produto|plano|internet|fibra)\b/.test(normalized)) return false;
   if (onlyDigits(text).length > 2) return false;
 
   const cleaned = text
@@ -1480,7 +1553,19 @@ function isNegative(text: string) {
 
 function isPlanRefusal(text: string) {
   const normalized = normalizeText(text);
-  return ["nao quero", "nao gostei", "nao tenho interesse", "muito caro", "ta caro", "esta caro", "vou pensar", "deixa pra la", "nenhum plano", "nao vou contratar"].some((term) => normalized.includes(term));
+  return [
+    "nao quero",
+    "nao gostei",
+    "nao tenho interesse",
+    "nao obrigado",
+    "muito caro",
+    "ta caro",
+    "esta caro",
+    "vou pensar",
+    "deixa pra la",
+    "nenhum plano",
+    "nao vou contratar",
+  ].some((term) => normalized.includes(term));
 }
 
 function getFirstName(name?: string) {
