@@ -8,7 +8,6 @@ export class LeadRepository {
       where: buildLeadAccessWhere(user),
       orderBy: { createdAt: "desc" },
       include: { assignedUser: true, plan: true, kanbanStage: true },
-      take: 100,
     });
   }
 

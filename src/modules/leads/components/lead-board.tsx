@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CalendarClock, Check, Download, Eye, LayoutGrid, List, MessageCircle, MessageSquareText, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -109,6 +109,8 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 });
 
+const LEADS_PER_PAGE = 25;
+
 export function LeadBoard() {
   const searchParams = useSearchParams();
   const { data, loading, error, refresh } = useApiResource<LeadListItem[]>("/api/leads");
@@ -123,6 +125,7 @@ export function LeadBoard() {
   const [newStageName, setNewStageName] = useState("");
   const [detail, setDetail] = useState<LeadDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [page, setPage] = useState(1);
 
   const activePlans = useMemo(() => (plans.data ?? []).filter((plan) => plan.active), [plans.data]);
   const kanbanStages = useMemo(() => {
@@ -167,6 +170,22 @@ export function LeadBoard() {
     () => filtered.reduce((sum, lead) => sum + Number(lead.expectedValue ?? 0), 0),
     [filtered],
   );
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / LEADS_PER_PAGE));
+  const paginatedLeads = useMemo(() => {
+    const start = (page - 1) * LEADS_PER_PAGE;
+    return filtered.slice(start, start + LEADS_PER_PAGE);
+  }, [filtered, page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, statusFilter, searchParams, viewMode]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -375,16 +394,25 @@ export function LeadBoard() {
             onOpenDetails={openLeadDetails}
           />
         ) : (
-          <TableView
-            leads={filtered}
-            loading={loading}
-            users={users.data ?? []}
-            plans={activePlans}
-            stages={kanbanStages}
-            onUpdate={updateLead}
-            onDelete={deleteLead}
-            onOpenDetails={openLeadDetails}
-          />
+          <div className="space-y-3">
+            <TableView
+              leads={paginatedLeads}
+              loading={loading}
+              users={users.data ?? []}
+              plans={activePlans}
+              stages={kanbanStages}
+              onUpdate={updateLead}
+              onDelete={deleteLead}
+              onOpenDetails={openLeadDetails}
+            />
+            <PaginationControls
+              page={page}
+              totalPages={totalPages}
+              totalItems={filtered.length}
+              itemsPerPage={LEADS_PER_PAGE}
+              onPageChange={setPage}
+            />
+          </div>
         )}
       </div>
       <LeadCreateModal
@@ -665,6 +693,52 @@ function TableView({
             )}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+function PaginationControls({
+  page,
+  totalPages,
+  totalItems,
+  itemsPerPage,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  totalItems: number;
+  itemsPerPage: number;
+  onPageChange: (page: number) => void;
+}) {
+  const start = totalItems === 0 ? 0 : (page - 1) * itemsPerPage + 1;
+  const end = Math.min(page * itemsPerPage, totalItems);
+
+  return (
+    <div className="flex flex-col gap-3 rounded-md border bg-background p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-muted-foreground">
+        Mostrando {start}-{end} de {totalItems} leads
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+        >
+          Anterior
+        </Button>
+        <span className="min-w-24 text-center text-muted-foreground">
+          Pagina {page} de {totalPages}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={page >= totalPages}
+          onClick={() => onPageChange(page + 1)}
+        >
+          Proxima
+        </Button>
       </div>
     </div>
   );
