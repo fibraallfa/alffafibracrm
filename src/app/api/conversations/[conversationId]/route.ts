@@ -8,9 +8,9 @@ const conversationService = new ConversationService();
 
 export async function DELETE(_: Request, context: { params: Promise<{ conversationId: string }> }) {
   try {
-    await requireCurrentUser();
+    const user = await requireCurrentUser();
     const { conversationId } = await context.params;
-    const result = await conversationService.deleteConversation(conversationId);
+    const result = await conversationService.deleteConversation(conversationId, user);
 
     return NextResponse.json(successResponse("Conversa excluída.", result));
   } catch (error) {

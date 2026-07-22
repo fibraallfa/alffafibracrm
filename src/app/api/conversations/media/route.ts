@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    await requireCurrentUser();
+    const user = await requireCurrentUser();
     const formData = await request.formData();
     const file = formData.get("file");
 
@@ -26,6 +26,7 @@ export async function POST(request: Request) {
       mimeType: file.type || "application/octet-stream",
       dataUrl,
       caption: formData.get("caption") ? String(formData.get("caption")) : undefined,
+      user,
     });
 
     return NextResponse.json(successResponse("Arquivo enviado.", detail));

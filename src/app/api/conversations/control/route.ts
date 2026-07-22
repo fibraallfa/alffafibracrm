@@ -13,6 +13,7 @@ export async function POST(request: Request) {
     const detail = await conversationService.toggleBotControl(
       String(body.conversationId ?? ""),
       user.id,
+      user,
     );
 
     return NextResponse.json(successResponse("Controle da conversa atualizado.", detail));

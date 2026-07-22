@@ -645,7 +645,7 @@ export function ConversationCenter() {
                   <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                     <span>{detail.botActive ? "Cris pode responder nesta conversa." : "Somente operador responde nesta conversa."}</span>
                     <span>•</span>
-                    <span>Todos os funcionários visualizam todas as conversas.</span>
+                    <span>{currentUser?.role === "ADMIN" ? "Administradores visualizam todas as conversas." : "Você visualiza apenas as conversas atribuídas a você."}</span>
                   </div>
                   <div className="flex flex-col gap-3 md:flex-row md:items-end">
                     <div className="flex gap-2">

@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma, User } from "@prisma/client";
 import { ChatbotRepository } from "@/repositories/chatbot.repository";
 import { ZapiService } from "@/services/zapi/zapi.service";
 
@@ -20,13 +20,14 @@ export class ConversationService {
     private readonly zapiService = new ZapiService(),
   ) {}
 
-  async list(params?: { offset?: number; limit?: number }) {
+  async list(params?: { offset?: number; limit?: number; user?: Pick<User, "id" | "role"> }) {
     const [conversations, total] = await Promise.all([
       this.chatbotRepository.listConversations({
         skip: params?.offset ?? 0,
         take: params?.limit ?? 25,
+        user: params?.user,
       }),
-      this.chatbotRepository.countConversations(),
+      this.chatbotRepository.countConversations(params?.user),
     ]);
 
     const items = conversations.map((conversation) => {
@@ -75,8 +76,8 @@ export class ConversationService {
     };
   }
 
-  async getDetail(conversationId: string) {
-    const conversation = await this.chatbotRepository.getConversationById(conversationId);
+  async getDetail(conversationId: string, user?: Pick<User, "id" | "role">) {
+    const conversation = await this.chatbotRepository.getConversationById(conversationId, user);
     if (!conversation) return null;
 
     const memory = this.parseMemory(conversation.memory);
@@ -115,23 +116,28 @@ export class ConversationService {
     return this.chatbotRepository.listAssignableUsers();
   }
 
-  async assignOwner(conversationId: string, ownerUserId: string | null) {
+  async assignOwner(conversationId: string, ownerUserId: string | null, user?: Pick<User, "id" | "role">) {
+    const detail = await this.getDetail(conversationId, user);
+    if (!detail) {
+      throw new Error("Conversa não encontrada.");
+    }
+
     await this.chatbotRepository.assignConversationOwner(conversationId, ownerUserId);
-    return this.getDetail(conversationId);
+    return this.getDetail(conversationId, user);
   }
 
-  async toggleBotControl(conversationId: string, ownerUserId: string | null) {
-    const detail = await this.getDetail(conversationId);
+  async toggleBotControl(conversationId: string, ownerUserId: string | null, user?: Pick<User, "id" | "role">) {
+    const detail = await this.getDetail(conversationId, user);
     if (!detail) {
       throw new Error("Conversa não encontrada.");
     }
 
     await this.chatbotRepository.assignConversationOwner(conversationId, detail.botActive ? ownerUserId : null);
-    return this.getDetail(conversationId);
+    return this.getDetail(conversationId, user);
   }
 
-  async updateTags(conversationId: string, tags: ConversationTag[]) {
-    const detail = await this.getDetail(conversationId);
+  async updateTags(conversationId: string, tags: ConversationTag[], user?: Pick<User, "id" | "role">) {
+    const detail = await this.getDetail(conversationId, user);
     if (!detail) {
       throw new Error("Conversa não encontrada.");
     }
@@ -142,11 +148,11 @@ export class ConversationService {
     };
 
     await this.chatbotRepository.updateConversationMemory(conversationId, memory as Prisma.InputJsonValue);
-    return this.getDetail(conversationId);
+    return this.getDetail(conversationId, user);
   }
 
-  async sendManualMessage(params: { conversationId: string; content: string }) {
-    const conversation = await this.chatbotRepository.getConversationById(params.conversationId);
+  async sendManualMessage(params: { conversationId: string; content: string; user?: Pick<User, "id" | "role"> }) {
+    const conversation = await this.chatbotRepository.getConversationById(params.conversationId, params.user);
     if (!conversation) {
       throw new Error("Conversa não encontrada.");
     }
@@ -164,7 +170,7 @@ export class ConversationService {
       sentAt: new Date(),
     });
 
-    return this.getDetail(conversation.id);
+    return this.getDetail(conversation.id, params.user);
   }
 
   async sendManualMedia(params: {
@@ -173,8 +179,9 @@ export class ConversationService {
     mimeType: string;
     dataUrl: string;
     caption?: string;
+    user?: Pick<User, "id" | "role">;
   }) {
-    const conversation = await this.chatbotRepository.getConversationById(params.conversationId);
+    const conversation = await this.chatbotRepository.getConversationById(params.conversationId, params.user);
     if (!conversation) {
       throw new Error("Conversa não encontrada.");
     }
@@ -223,7 +230,7 @@ export class ConversationService {
       sentAt: new Date(),
     });
 
-    return this.getDetail(conversation.id);
+    return this.getDetail(conversation.id, params.user);
   }
 
   async startConversation(params: { phone: string; ownerUserId?: string | null; leadName?: string; firstMessage?: string }) {
@@ -251,8 +258,8 @@ export class ConversationService {
     return this.getDetail(conversation.id);
   }
 
-  async deleteConversation(conversationId: string) {
-    const detail = await this.getDetail(conversationId);
+  async deleteConversation(conversationId: string, user?: Pick<User, "id" | "role">) {
+    const detail = await this.getDetail(conversationId, user);
     if (!detail) {
       throw new Error("Conversa não encontrada.");
     }

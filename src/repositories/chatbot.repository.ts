@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { publishConversationEvent } from "@/server/realtime/conversation-events";
 
@@ -212,15 +212,15 @@ export class ChatbotRepository {
     });
   }
 
-  async countConversations() {
+  async countConversations(user?: Pick<User, "id" | "role">) {
     return prisma.chatConversation.count({
-      where: { deletedAt: null },
+      where: buildConversationAccessWhere(user),
     });
   }
 
-  async listConversations(params?: { skip?: number; take?: number }) {
+  async listConversations(params?: { skip?: number; take?: number; user?: Pick<User, "id" | "role"> }) {
     return prisma.chatConversation.findMany({
-      where: { deletedAt: null },
+      where: buildConversationAccessWhere(params?.user),
       include: {
         lead: true,
         agent: true,
@@ -236,9 +236,9 @@ export class ChatbotRepository {
     });
   }
 
-  async getConversationById(id: string) {
+  async getConversationById(id: string, user?: Pick<User, "id" | "role">) {
     return prisma.chatConversation.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, ...buildConversationAccessWhere(user) },
       include: {
         lead: true,
         agent: true,
@@ -322,4 +322,17 @@ export class ChatbotRepository {
 
     return conversation;
   }
+}
+
+function buildConversationAccessWhere(user?: Pick<User, "id" | "role">): Prisma.ChatConversationWhereInput {
+  if (user?.role === "EMPLOYEE") {
+    return {
+      deletedAt: null,
+      ownerUserId: user.id,
+    };
+  }
+
+  return {
+    deletedAt: null,
+  };
 }

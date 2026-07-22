@@ -8,11 +8,12 @@ const conversationService = new ConversationService();
 
 export async function POST(request: Request) {
   try {
-    await requireCurrentUser();
+    const user = await requireCurrentUser();
     const body = await request.json();
     const detail = await conversationService.assignOwner(
       String(body.conversationId ?? ""),
       body.ownerUserId ? String(body.ownerUserId) : null,
+      user,
     );
 
     return NextResponse.json(successResponse("Responsável atualizado.", detail));

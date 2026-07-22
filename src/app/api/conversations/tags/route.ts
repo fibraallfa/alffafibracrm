@@ -8,7 +8,7 @@ const conversationService = new ConversationService();
 
 export async function POST(request: Request) {
   try {
-    await requireCurrentUser();
+    const user = await requireCurrentUser();
     const body = await request.json();
     const tags = Array.isArray(body.tags)
       ? body.tags.map((tag: unknown) =>
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
               },
         )
       : [];
-    const detail = await conversationService.updateTags(String(body.conversationId ?? ""), tags);
+    const detail = await conversationService.updateTags(String(body.conversationId ?? ""), tags, user);
 
     return NextResponse.json(successResponse("Etiquetas atualizadas.", detail));
   } catch (error) {
