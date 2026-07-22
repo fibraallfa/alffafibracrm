@@ -1,7 +1,5 @@
 import { authErrorResponse } from "@/lib/api-errors";
 import { requireCurrentUser } from "@/lib/auth-context";
-import { assertPermission } from "@/lib/permissions";
-import { permissions } from "@/constants/permissions";
 import { createConversationListener, getConversationChannelName } from "@/server/realtime/conversation-events";
 
 export const runtime = "nodejs";
@@ -9,8 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   try {
-    const user = await requireCurrentUser();
-    assertPermission(user, permissions.agentsEdit);
+    await requireCurrentUser();
 
     const client = createConversationListener();
     const channel = getConversationChannelName();

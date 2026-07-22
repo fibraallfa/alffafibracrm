@@ -16,7 +16,7 @@ import { permissions } from "@/constants/permissions";
 export const navigationItems = [
   { title: "Dashboard", href: "/dashboard", icon: BarChart3, permission: permissions.dashboardView },
   { title: "Visão Geral", href: "/visao-geral", icon: ChartPie, permission: permissions.dashboardView },
-  { title: "Conversas", href: "/conversas", icon: MessageCircleMore, permission: permissions.agentsEdit },
+  { title: "Conversas", href: "/conversas", icon: MessageCircleMore, permission: permissions.agentsEdit, employeeVisible: true },
   { title: "Leads", href: "/leads", icon: Users, permission: permissions.leadsView },
   { title: "Compromissos", href: "/compromissos", icon: CalendarCheck, permission: permissions.appointmentsView },
   { title: "Despesas", href: "/despesas", icon: ReceiptText, permission: permissions.expensesView },
