@@ -219,6 +219,16 @@ export class ChatbotEngineService {
       };
     }
 
+    const billingQuestion = this.tryHandleBillingQuestion({
+      text,
+      state: input.state,
+      memory,
+      firstName,
+    });
+    if (billingQuestion) {
+      return billingQuestion;
+    }
+
     if (shouldAnswerOutsideFlow(text, input.state)) {
       const answer = await this.answerOutsideFlow({
         message: text,
@@ -280,6 +290,31 @@ export class ChatbotEngineService {
     }
 
     if (input.state === "ASK_NAME") {
+      const correctedCep = parseCep(text);
+      if (correctedCep && (looksLikeAddressCorrection(text) || looksLikeCepOnlyMessage(text))) {
+        return this.handleCepStep({
+          cep: correctedCep,
+          text,
+          memory,
+        });
+      }
+
+      if (looksLikeWaitMessage(text)) {
+        return {
+          state: "ASK_NAME",
+          memory,
+          reply: "Sem problema 😊 Fico por aqui. Quando puder, me envie seu nome completo para continuarmos.",
+        };
+      }
+
+      if (looksLikeAddressCorrection(text)) {
+        return {
+          state: "ASK_NAME",
+          memory,
+          reply: "Sem problema 😊 Me envie o CEP correto da instalação para eu atualizar o endereço e continuar seu atendimento.",
+        };
+      }
+
       const fullName = parseFullName(text);
       if (!fullName) {
         if (shouldUseAiFallbackForState("ASK_NAME", text)) {
@@ -308,6 +343,14 @@ export class ChatbotEngineService {
     }
 
     if (input.state === "ASK_DOCUMENT") {
+      if (looksLikeWaitMessage(text)) {
+        return {
+          state: "ASK_DOCUMENT",
+          memory,
+          reply: `${getFirstName(memory.name) || "Perfeito"} 😊 Fico no aguardo. Quando puder, me envie seu CPF ou CNPJ para seguirmos.`,
+        };
+      }
+
       const document = parseDocument(text);
       if (!document.valid) {
         if (shouldUseAiFallbackForState("ASK_DOCUMENT", text)) {
@@ -341,6 +384,14 @@ export class ChatbotEngineService {
     }
 
     if (input.state === "ASK_BIRTH_DATE") {
+      if (looksLikeWaitMessage(text)) {
+        return {
+          state: "ASK_BIRTH_DATE",
+          memory,
+          reply: "Tranquilo 😊 Quando puder, me envie sua data de nascimento no formato 26/01/1998 para continuarmos.",
+        };
+      }
+
       const birthDate = parseBirthDate(text);
       if (!birthDate) {
         if (shouldUseAiFallbackForState("ASK_BIRTH_DATE", text)) {
@@ -373,6 +424,14 @@ export class ChatbotEngineService {
     }
 
     if (input.state === "ASK_STREET_NUMBER") {
+      if (looksLikeWaitMessage(text)) {
+        return {
+          state: "ASK_STREET_NUMBER",
+          memory,
+          reply: "Tudo certo 😊 Quando puder, me informe só o número da residência para eu seguir com o cadastro.",
+        };
+      }
+
       const streetNumber = parseSimpleNumber(text);
       if (!streetNumber) {
         if (shouldUseAiFallbackForState("ASK_STREET_NUMBER", text)) {
@@ -405,6 +464,23 @@ export class ChatbotEngineService {
     }
 
     if (input.state === "ASK_COMPLEMENT") {
+      if (looksLikeAddressCorrection(text)) {
+        const correctedCep = parseCep(text);
+        if (correctedCep) {
+          return this.handleCepStep({
+            cep: correctedCep,
+            text,
+            memory,
+          });
+        }
+
+        return {
+          state: "ASK_NAME",
+          memory,
+          reply: "Perfeito 😊 Me envie o CEP correto da instalação para eu atualizar o endereço e seguir com você.",
+        };
+      }
+
       if (shouldUseAiFallbackForState("ASK_COMPLEMENT", text)) {
         const answer = await this.answerOutsideFlow({
           message: text,
@@ -429,6 +505,14 @@ export class ChatbotEngineService {
     }
 
     if (input.state === "ASK_BILLING_DUE_DAY") {
+      if (looksLikeWaitMessage(text)) {
+        return {
+          state: "ASK_BILLING_DUE_DAY",
+          memory,
+          reply: "Sem problema 😊 Quando decidir, me diga qual vencimento você prefere: 5, 8, 10, 15, 20 ou 25.",
+        };
+      }
+
       const billingDay = parseBillingDay(text);
       if (!billingDay) {
         if (shouldUseAiFallbackForState("ASK_BILLING_DUE_DAY", text)) {
@@ -461,6 +545,14 @@ export class ChatbotEngineService {
     }
 
     if (input.state === "ASK_EMAIL") {
+      if (looksLikeWaitMessage(text)) {
+        return {
+          state: "ASK_EMAIL",
+          memory,
+          reply: "Fico por aqui 😊 Quando puder, me envie seu e-mail para eu concluir essa etapa do cadastro.",
+        };
+      }
+
       const email = parseEmail(text);
       if (!email) {
         if (shouldUseAiFallbackForState("ASK_EMAIL", text)) {
@@ -840,6 +932,30 @@ export class ChatbotEngineService {
     } catch {
       return "Posso te orientar sobre os planos e a contratação da Claro. 😊";
     }
+  }
+
+  private tryHandleBillingQuestion(input: {
+    text: string;
+    state: string;
+    memory: ChatMemory;
+    firstName?: string;
+  }): NextBotResponse | null {
+    if (!asksAboutBillingOrFirstPayment(input.text)) {
+      return null;
+    }
+
+    const dayList = "5, 8, 10, 15, 20 ou 25";
+    const chosenDay = input.memory.billingDueDay;
+    const resume = promptForState(input.state, input.firstName);
+    const answer = chosenDay
+      ? `O vencimento que ficou registrado até agora é o dia ${chosenDay}. Se quiser alterar, eu também posso ajustar para 5, 8, 10, 15, 20 ou 25. 📅`
+      : `Você pode escolher o vencimento para os dias ${dayList} do mês. Assim que me disser qual prefere, eu sigo com seu cadastro. 📅`;
+
+    return {
+      state: input.state,
+      memory: input.memory,
+      reply: `${answer}\n\n${resume}`,
+    };
   }
 }
 
@@ -1329,6 +1445,10 @@ function shouldAnswerOutsideFlow(text: string, state: string) {
 function shouldUseAiFallbackForState(state: string, text: string) {
   if (!text.trim()) return false;
 
+  if (looksLikeWaitMessage(text) || looksLikeAddressCorrection(text) || asksAboutBillingOrFirstPayment(text)) {
+    return true;
+  }
+
   const conversationalDiversion =
     looksLikeQuestion(text) ||
     looksLikeObjection(text) ||
@@ -1414,6 +1534,10 @@ function looksLikeTopicChange(text: string) {
     "consultor",
     "humano",
     "cobertura",
+    "pagamento",
+    "vencimento",
+    "endereco",
+    "cep",
   ].some((term) =>
     normalized.includes(normalizeText(term)),
   );
@@ -1424,6 +1548,7 @@ function parseFullNameLike(text: string) {
   if (!normalized) return false;
   if (looksLikeObjection(text) || looksLikeCancellation(text) || looksLikeQuestion(text) || looksLikeTopicChange(text)) return false;
   if (/\b(claro|produto|plano|internet|fibra)\b/.test(normalized)) return false;
+  if (looksLikeWaitMessage(text) || looksLikeAddressCorrection(text)) return false;
   if (onlyDigits(text).length > 2) return false;
 
   const cleaned = text
@@ -1440,7 +1565,88 @@ function parseFullNameLike(text: string) {
   const relevantWords = words.filter((word) => !fillerWords.has(normalizeText(word)));
   if (relevantWords.length < 2) return false;
 
+  const forbiddenWords = new Set([
+    "data",
+    "nascimento",
+    "documento",
+    "cpf",
+    "cnpj",
+    "cep",
+    "endereco",
+    "pagamento",
+    "vencimento",
+    "produto",
+    "plano",
+    "internet",
+    "claro",
+    "final",
+    "rua",
+  ]);
+
+  if (relevantWords.some((word) => forbiddenWords.has(normalizeText(word)))) return false;
+
   return relevantWords.every((word) => normalizeText(word).length >= 2);
+}
+
+function looksLikeWaitMessage(text: string) {
+  const normalized = normalizeText(text);
+  return [
+    "so um instante",
+    "só um instante",
+    "um instante",
+    "aguarde",
+    "so um minuto",
+    "só um minuto",
+    "ja te mando",
+    "já te mando",
+    "ja envio",
+    "já envio",
+    "vou ver",
+    "vou conferir",
+    "vou pegar",
+    "to vendo",
+    "tô vendo",
+    "to procurando",
+    "tô procurando",
+    "pera ai",
+    "pera aí",
+    "so um momento",
+    "só um momento",
+  ].some((term) => normalized.includes(normalizeText(term)));
+}
+
+function asksAboutBillingOrFirstPayment(text: string) {
+  const normalized = normalizeText(text);
+  return (
+    /(primeiro pagamento|primeira mensalidade|quando seria o primeiro pagamento|quando seria o pagamento|quando vence|vencimento|data de vencimento|dia de vencimento|pagamento)/.test(normalized)
+      || (looksLikeQuestion(text) && /(boleto|fatura|mensalidade)/.test(normalized))
+  );
+}
+
+function looksLikeAddressCorrection(text: string) {
+  const normalized = normalizeText(text);
+  return [
+    "nao esse endereco",
+    "não esse endereço",
+    "esse endereco esta errado",
+    "esse endereço está errado",
+    "endereco errado",
+    "endereço errado",
+    "nao e esse endereco",
+    "não é esse endereço",
+    "esse nao e meu endereco",
+    "esse não é meu endereço",
+    "nao e meu endereco",
+    "não é meu endereço",
+    "corrigir endereco",
+    "corrigir endereço",
+    "cep errado",
+  ].some((term) => normalized.includes(normalizeText(term)));
+}
+
+function looksLikeCepOnlyMessage(text: string) {
+  const cep = parseCep(text);
+  return Boolean(cep) && onlyDigits(text).length >= 8 && normalizeText(text).split(" ").length <= 3;
 }
 
 function promptForState(state: string, firstName?: string) {

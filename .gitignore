@@ -8,3 +8,5 @@ coverage
 *.pdf
 public/*.xls
 public/*.xlsx
+.vercel
+.env*
