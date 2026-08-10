@@ -28,7 +28,21 @@ export function MobileNav() {
               href={item.href}
               className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-md text-[10px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
-              <item.icon className="h-4 w-4" aria-hidden="true" />
+              <div className="relative">
+                <item.icon className="h-4 w-4" aria-hidden="true" />
+                {"badgeLabel" in item && item.badgeLabel ? (
+                  <span
+                    className={
+                      "absolute -right-3 -top-2 rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] " +
+                      ("badgeTone" in item && item.badgeTone === "green"
+                        ? "bg-emerald-500 text-white"
+                        : "bg-cyan-500 text-white")
+                    }
+                  >
+                    {item.badgeLabel}
+                  </span>
+                ) : null}
+              </div>
               <span className="max-w-full truncate">{item.title}</span>
             </Link>
           )

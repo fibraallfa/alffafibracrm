@@ -40,10 +40,24 @@ export function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
-                className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 hover:text-white"
+                className="flex items-center justify-between gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 hover:text-white"
               >
-                <item.icon className="h-4 w-4" aria-hidden="true" />
-                {item.title}
+                <span className="flex items-center gap-3">
+                  <item.icon className="h-4 w-4" aria-hidden="true" />
+                  {item.title}
+                </span>
+                {"badgeLabel" in item && item.badgeLabel ? (
+                  <span
+                    className={
+                      "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] " +
+                      ("badgeTone" in item && item.badgeTone === "green"
+                        ? "bg-emerald-400/15 text-emerald-200"
+                        : "bg-cyan-400/10 text-cyan-200")
+                    }
+                  >
+                    {item.badgeLabel}
+                  </span>
+                ) : null}
               </Link>
             )
           ))}
