@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ImagePlus, Loader2, Megaphone, Send, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,8 @@ type DispatchResult = {
     detail: string;
   }>;
 };
+
+const LAST_MASS_MESSAGE_RESULT_KEY = "alffa-fibra:last-mass-message-result";
 
 export function MassMessagePanel() {
   const [contacts, setContacts] = useState("");
@@ -38,6 +40,25 @@ export function MassMessagePanel() {
 
     return unique.size;
   }, [contacts]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(LAST_MASS_MESSAGE_RESULT_KEY);
+      if (!stored) return;
+
+      const parsed = JSON.parse(stored) as DispatchResult;
+      if (
+        typeof parsed?.total === "number" &&
+        typeof parsed?.sent === "number" &&
+        typeof parsed?.failed === "number" &&
+        Array.isArray(parsed?.contacts)
+      ) {
+        setResult(parsed);
+      }
+    } catch {
+      window.localStorage.removeItem(LAST_MASS_MESSAGE_RESULT_KEY);
+    }
+  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -66,6 +87,7 @@ export function MassMessagePanel() {
       }
 
       setResult(payload.data);
+      window.localStorage.setItem(LAST_MASS_MESSAGE_RESULT_KEY, JSON.stringify(payload.data));
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Falha no envio em massa.");
     } finally {
