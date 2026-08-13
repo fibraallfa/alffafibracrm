@@ -72,6 +72,7 @@ type ZapiWebhookPayload = {
 };
 
 export async function POST(request: Request) {
+  const debugRequested = request.headers.get("x-cris-debug") === "1";
   try {
     const rawPayload = (await request.json()) as ZapiWebhookPayload;
     const payload = unwrapWebhookPayload(rawPayload);
@@ -120,6 +121,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(successResponse("Webhook processado.", result));
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "unknown";
     await writeTechnicalLog({
       level: "ERROR",
       category: "webhook",
@@ -128,12 +130,17 @@ export async function POST(request: Request) {
       endpoint: "/api/webhooks/zapi",
       integration: "zapi",
       metadata: {
-        error: error instanceof Error ? error.message : "unknown",
+        error: errorMessage,
       },
     });
-    return NextResponse.json(errorResponse("Nao foi possivel processar o webhook."), {
-      status: 500,
-    });
+    const response = errorResponse("Nao foi possivel processar o webhook.");
+    if (debugRequested) {
+      return NextResponse.json({
+        ...response,
+        details: errorMessage,
+      }, { status: 500 });
+    }
+    return NextResponse.json(response, { status: 500 });
   }
 }
 

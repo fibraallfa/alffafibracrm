@@ -23,7 +23,7 @@ export class ZapiService {
   async sendText({ phone, message, delayTypingSeconds, config }: SendTextInput) {
     const zapiConfig = { ...(await getZapiRuntimeConfig()), ...cleanConfig(config) };
     if (!zapiConfig.instanceId || !zapiConfig.token) {
-      throw new Error("Z-API nao configurada.");
+      throw new Error(`Z-API nao configurada. instanceId=${Boolean(zapiConfig.instanceId)} token=${Boolean(zapiConfig.token)} clientToken=${Boolean(zapiConfig.clientToken)}`);
     }
 
     const endpoint = `${zapiConfig.baseUrl}/instances/${zapiConfig.instanceId}/token/${zapiConfig.token}/send-text`;
@@ -64,10 +64,15 @@ export class ZapiService {
         });
 
         if (response.status < 500 || attempt === 2) {
-          throw new Error("Falha ao enviar mensagem pela Z-API.");
+          throw new Error(`Falha ao enviar mensagem pela Z-API. status=${response.status} body=${responseBody.slice(0, 300)}`);
         }
       } catch (error) {
-        if (attempt === 2) throw error;
+        if (attempt === 2) {
+          if (error instanceof Error) {
+            throw new Error(`Falha ao enviar mensagem pela Z-API na tentativa ${attempt}: ${error.message}`);
+          }
+          throw error;
+        }
         await wait(500);
       }
     }
@@ -94,7 +99,7 @@ export class ZapiService {
   private async post(action: string, body: Record<string, unknown>, config?: Partial<ZapiConfig>) {
     const zapiConfig = { ...(await getZapiRuntimeConfig()), ...cleanConfig(config) };
     if (!zapiConfig.instanceId || !zapiConfig.token) {
-      throw new Error("Z-API nao configurada.");
+      throw new Error(`Z-API nao configurada. instanceId=${Boolean(zapiConfig.instanceId)} token=${Boolean(zapiConfig.token)} clientToken=${Boolean(zapiConfig.clientToken)}`);
     }
 
     const response = await fetch(
@@ -126,7 +131,7 @@ export class ZapiService {
       metadata: { response: responseBody.slice(0, 500) },
     });
 
-    throw new Error("Falha ao enviar mídia pela Z-API.");
+    throw new Error(`Falha ao enviar mídia pela Z-API (${action}). status=${response.status} body=${responseBody.slice(0, 300)}`);
   }
 
   private async optionalPost(action: string, body: Record<string, string>, config?: Partial<ZapiConfig>) {
