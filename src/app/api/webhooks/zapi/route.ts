@@ -14,6 +14,8 @@ type ZapiWebhookPayload = {
   phone?: string;
   sender?: string;
   from?: string;
+  data?: ZapiWebhookPayload;
+  messageData?: ZapiWebhookPayload;
   fromMe?: boolean;
   isGroup?: boolean;
   messageId?: string;
@@ -42,6 +44,27 @@ type ZapiWebhookPayload = {
     body?: string;
     selectedDisplayText?: string;
   };
+  buttonsResponseMessage?: {
+    message?: string;
+    buttonText?: { displayText?: string };
+    selectedButtonId?: string;
+  };
+  listResponseMessage?: {
+    message?: string;
+    title?: string;
+    description?: string;
+    selectedRowId?: string;
+  };
+  buttonText?: {
+    displayText?: string;
+  };
+  reaction?: {
+    text?: string;
+    emoji?: string;
+  };
+  contact?: {
+    displayName?: string;
+  };
   image?: { mimeType?: string; imageUrl?: string; caption?: string; downloadError?: string | null };
   document?: { documentUrl?: string; mimeType?: string; fileName?: string; pageCount?: number };
   audio?: { audioUrl?: string; mimeType?: string; seconds?: number; ptt?: boolean; viewOnce?: boolean };
@@ -50,7 +73,8 @@ type ZapiWebhookPayload = {
 
 export async function POST(request: Request) {
   try {
-    const payload = (await request.json()) as ZapiWebhookPayload;
+    const rawPayload = (await request.json()) as ZapiWebhookPayload;
+    const payload = unwrapWebhookPayload(rawPayload);
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
     const rateLimit = checkRateLimit(`zapi:${ip}`, 120, 60_000);
 
@@ -71,7 +95,7 @@ export async function POST(request: Request) {
       const result = await chatbotEngineService.handleIncomingCall({
         phone,
         providerId: payload.callId ?? providerId,
-        rawPayload: payload as Prisma.InputJsonValue,
+        rawPayload: rawPayload as Prisma.InputJsonValue,
         instanceId: payload.instanceId,
       });
       return NextResponse.json(successResponse("Ligação recusada e fluxo retomado.", result));
@@ -89,7 +113,7 @@ export async function POST(request: Request) {
       phone,
       message: incoming.message,
       providerId,
-      rawPayload: payload as Prisma.InputJsonValue,
+      rawPayload: rawPayload as Prisma.InputJsonValue,
       instanceId: payload.instanceId,
       extractedData: incoming.extractedData,
     });
@@ -118,6 +142,18 @@ function isIncomingCallNotification(notification?: string) {
     .includes(notification ?? "");
 }
 
+function unwrapWebhookPayload(payload: ZapiWebhookPayload) {
+  if (payload.data && typeof payload.data === "object") {
+    return { ...payload, ...payload.data };
+  }
+
+  if (payload.messageData && typeof payload.messageData === "object") {
+    return { ...payload, ...payload.messageData };
+  }
+
+  return payload;
+}
+
 async function extractIncomingMessage(payload: ZapiWebhookPayload) {
   const text = (
     payload.text?.message ??
@@ -133,8 +169,21 @@ async function extractIncomingMessage(payload: ZapiWebhookPayload) {
     payload.extendedTextMessage?.text ??
     payload.extendedTextMessage?.body ??
     payload.extendedTextMessage?.selectedDisplayText ??
+    payload.buttonsResponseMessage?.message ??
+    payload.buttonsResponseMessage?.buttonText?.displayText ??
+    payload.buttonsResponseMessage?.selectedButtonId ??
+    payload.listResponseMessage?.message ??
+    payload.listResponseMessage?.title ??
+    payload.listResponseMessage?.description ??
+    payload.listResponseMessage?.selectedRowId ??
+    payload.buttonText?.displayText ??
+    payload.reaction?.text ??
+    payload.reaction?.emoji ??
+    payload.contact?.displayName ??
     findNestedMessageText(payload.message) ??
     findNestedMessageText(payload.text) ??
+    findNestedMessageText(payload.buttonsResponseMessage) ??
+    findNestedMessageText(payload.listResponseMessage) ??
     payload.body ??
     ""
   ).trim();
@@ -192,7 +241,20 @@ function findNestedMessageText(value: unknown, depth = 0): string | undefined {
   if (typeof value !== "object") return undefined;
 
   const record = value as Record<string, unknown>;
-  const preferredKeys = ["message", "body", "text", "content", "conversation", "selectedDisplayText"];
+  const preferredKeys = [
+    "message",
+    "body",
+    "text",
+    "content",
+    "conversation",
+    "selectedDisplayText",
+    "displayText",
+    "title",
+    "description",
+    "selectedRowId",
+    "selectedButtonId",
+    "emoji",
+  ];
 
   for (const key of preferredKeys) {
     const nested = findNestedMessageText(record[key], depth + 1);
