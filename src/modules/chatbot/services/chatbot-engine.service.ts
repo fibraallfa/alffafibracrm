@@ -1804,12 +1804,21 @@ function agentConfig(
   runtimeInstanceId?: string,
 ) {
   if (!agent && !runtimeInstanceId) return undefined;
+  const resolvedAgent = agent ?? undefined;
   if (runtimeInstanceId) {
+    if (resolvedAgent?.zapiInstanceId === runtimeInstanceId) {
+      return {
+        baseUrl: resolvedAgent.zapiBaseUrl ?? undefined,
+        instanceId: resolvedAgent.zapiInstanceId ?? runtimeInstanceId,
+        token: resolvedAgent.zapiToken ?? undefined,
+        clientToken: resolvedAgent.zapiClientToken ?? undefined,
+        whatsappNumber: resolvedAgent.zapiWhatsappNumber ?? undefined,
+      };
+    }
     return {
       instanceId: runtimeInstanceId,
     };
   }
-  const resolvedAgent = agent ?? undefined;
   return {
     baseUrl: resolvedAgent?.zapiBaseUrl ?? undefined,
     instanceId: resolvedAgent?.zapiInstanceId ?? undefined,
