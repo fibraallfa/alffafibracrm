@@ -53,7 +53,11 @@ export class ChatbotEngineService {
     const memory = normalizeMemory(conversation.memory);
     const resumePrompt = callResumePrompt(conversation.state, memory, agent);
     const reply = `Não consigo atender ligações por aqui, mas continuo com você pelo WhatsApp. 😊\n\n${resumePrompt}`;
-    await this.zapiService.sendText({ phone, message: reply, config: agentConfig(agent) });
+    await this.zapiService.sendText({
+      phone,
+      message: reply,
+      config: agentConfig(agent, input.instanceId),
+    });
     await this.chatbotRepository.saveMessage({
       conversationId: conversation.id,
       direction: "outbound",
@@ -115,7 +119,7 @@ export class ChatbotEngineService {
     }
 
     if (input.providerId) {
-      await this.zapiService.markAsRead(input.providerId, phone, agentConfig(agent));
+      await this.zapiService.markAsRead(input.providerId, phone, agentConfig(agent, input.instanceId));
     }
 
     const next = await this.nextResponse({
@@ -137,7 +141,7 @@ export class ChatbotEngineService {
       phone,
       message: next.reply,
       delayTypingSeconds: typingEnabled ? delaySeconds : undefined,
-      config: agentConfig(agent),
+      config: agentConfig(agent, input.instanceId),
     });
     await this.chatbotRepository.saveMessage({
       conversationId: conversation.id,
@@ -1795,14 +1799,18 @@ function interpolate(template: string, memory: ChatMemory, agentName?: string) {
     .replaceAll("{{endereco}}", formatFullAddress(memory));
 }
 
-function agentConfig(agent: Awaited<ReturnType<ChatbotRepository["getAgentByInstance"]>>) {
-  if (!agent) return undefined;
+function agentConfig(
+  agent: Awaited<ReturnType<ChatbotRepository["getAgentByInstance"]>>,
+  runtimeInstanceId?: string,
+) {
+  if (!agent && !runtimeInstanceId) return undefined;
+  const resolvedAgent = agent ?? undefined;
   return {
-    baseUrl: agent.zapiBaseUrl ?? undefined,
-    instanceId: agent.zapiInstanceId ?? undefined,
-    token: agent.zapiToken ?? undefined,
-    clientToken: agent.zapiClientToken ?? undefined,
-    whatsappNumber: agent.zapiWhatsappNumber ?? undefined,
+    baseUrl: resolvedAgent?.zapiBaseUrl ?? undefined,
+    instanceId: runtimeInstanceId ?? resolvedAgent?.zapiInstanceId ?? undefined,
+    token: resolvedAgent?.zapiToken ?? undefined,
+    clientToken: resolvedAgent?.zapiClientToken ?? undefined,
+    whatsappNumber: resolvedAgent?.zapiWhatsappNumber ?? undefined,
   };
 }
 
