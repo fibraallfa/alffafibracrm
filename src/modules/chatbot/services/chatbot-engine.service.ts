@@ -1804,10 +1804,15 @@ function agentConfig(
   runtimeInstanceId?: string,
 ) {
   if (!agent && !runtimeInstanceId) return undefined;
+  if (runtimeInstanceId) {
+    return {
+      instanceId: runtimeInstanceId,
+    };
+  }
   const resolvedAgent = agent ?? undefined;
   return {
     baseUrl: resolvedAgent?.zapiBaseUrl ?? undefined,
-    instanceId: runtimeInstanceId ?? resolvedAgent?.zapiInstanceId ?? undefined,
+    instanceId: resolvedAgent?.zapiInstanceId ?? undefined,
     token: resolvedAgent?.zapiToken ?? undefined,
     clientToken: resolvedAgent?.zapiClientToken ?? undefined,
     whatsappNumber: resolvedAgent?.zapiWhatsappNumber ?? undefined,
