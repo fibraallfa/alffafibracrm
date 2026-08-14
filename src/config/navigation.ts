@@ -24,7 +24,7 @@ export const navigationItems = [
   { title: "Despesas", href: "/despesas", icon: ReceiptText, permission: permissions.expensesView },
   { title: "SDR por Voz", href: "/sdr-por-voz", icon: Headphones, permission: permissions.dashboardView, comingSoon: true },
   { title: "N8N", href: "/n8n", icon: Workflow, permission: permissions.agentsEdit },
-  { title: "Usuários", href: "/usuarios", icon: Bot, permission: permissions.usersEdit, adminOnly: true },
+  { title: "Cadastros/Fornecedores", href: "/usuarios", icon: Bot, permission: permissions.usersEdit, adminOnly: true },
   { title: "CEPs", href: "/ceps", icon: MapPinned, permission: permissions.cepsView },
   { title: "Configurações", href: "/configuracoes", icon: Settings, permission: permissions.settingsView, employeeVisible: true },
 ] as const;
