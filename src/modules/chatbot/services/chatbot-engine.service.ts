@@ -1021,9 +1021,7 @@ function randomDelaySeconds(minSeconds: number, maxSeconds: number) {
 }
 
 function normalizeWhatsappPhone(phone: string) {
-  const normalized = phone.trim().toLowerCase();
   const digits = onlyDigits(phone).replace(/^00/, "");
-  if (normalized.endsWith("@lid")) return `${digits}@lid`;
   if (digits.startsWith("55")) return digits;
   if (digits.length === 10 || digits.length === 11) return `55${digits}`;
   return digits;
@@ -1305,6 +1303,14 @@ function formatPlanList(plans: PlanCandidate[]) {
 }
 
 function findRecommendedPlan(plans: PlanCandidate[]) {
+  const comboSuper = plans.find((plan) => {
+    const normalizedName = normalizeText(plan.name);
+    return normalizedName.includes("combo super") &&
+      normalizedName.includes("500mb") &&
+      normalizedName.includes("60gb");
+  });
+  if (comboSuper) return comboSuper;
+
   const comboHexa = plans.find((plan) => normalizeText(plan.name).includes("combo hexa"));
   if (comboHexa) return comboHexa;
 

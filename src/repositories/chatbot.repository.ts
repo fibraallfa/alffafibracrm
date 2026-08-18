@@ -24,12 +24,32 @@ export class ChatbotRepository {
   }
 
   async findOrCreateConversation(phone: string, agentId?: string) {
+    const existingForAgent = agentId
+      ? await prisma.chatConversation.findFirst({
+        where: { phone, agentId, deletedAt: null },
+        include: { messages: { orderBy: { createdAt: "desc" }, take: 10 }, owner: true, lead: true, agent: true },
+        orderBy: { updatedAt: "desc" },
+      })
+      : null;
+
+    if (existingForAgent) {
+      return existingForAgent;
+    }
+
     const existing = await prisma.chatConversation.findFirst({
-      where: { phone, agentId: agentId ?? undefined, deletedAt: null },
+      where: { phone, deletedAt: null },
       include: { messages: { orderBy: { createdAt: "desc" }, take: 10 }, owner: true, lead: true, agent: true },
+      orderBy: { updatedAt: "desc" },
     });
 
     if (existing) {
+      if (!existing.agentId && agentId) {
+        return prisma.chatConversation.update({
+          where: { id: existing.id },
+          data: { agentId },
+          include: { messages: { orderBy: { createdAt: "desc" }, take: 10 }, owner: true, lead: true, agent: true },
+        });
+      }
       return existing;
     }
 
