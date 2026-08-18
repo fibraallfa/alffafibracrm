@@ -1305,9 +1305,14 @@ function formatPlanList(plans: PlanCandidate[]) {
 function findRecommendedPlan(plans: PlanCandidate[]) {
   const comboSuper = plans.find((plan) => {
     const normalizedName = normalizeText(plan.name);
-    return normalizedName.includes("combo super") &&
-      normalizedName.includes("500mb") &&
-      normalizedName.includes("60gb");
+    const normalizedSpeed = normalizeText(plan.speed);
+    const has500 = normalizedName.includes("500mb") || normalizedSpeed.includes("500mb");
+    const has60Gb = normalizedName.includes("60gb") || normalizedSpeed.includes("60gb");
+    return has500 && has60Gb &&
+      (normalizedName.includes("combo super") ||
+        normalizedName.includes("plano") ||
+        normalizedName.includes("celular") ||
+        approximatelyEqual(Number(plan.price), 129.9, 0.11));
   });
   if (comboSuper) return comboSuper;
 
