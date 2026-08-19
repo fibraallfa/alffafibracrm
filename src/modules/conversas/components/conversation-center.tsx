@@ -273,6 +273,36 @@ export function ConversationCenter() {
   }, [detail, payload?.conversations.items.length, selectedId]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function processFollowUps() {
+      try {
+        await fetch("/api/cron/conversations-follow-up", { cache: "no-store" });
+        if (!cancelled) {
+          void loadConversations({
+            preferredId: selectedId,
+            reset: true,
+            silent: true,
+            limitOverride: Math.max(payload?.conversations.items.length ?? PAGE_SIZE, PAGE_SIZE),
+          });
+        }
+      } catch {
+        // Keep the inbox usable even if the silent follow-up trigger fails.
+      }
+    }
+
+    void processFollowUps();
+    const intervalId = window.setInterval(() => {
+      void processFollowUps();
+    }, 60_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [payload?.conversations.items.length, selectedId]);
+
+  useEffect(() => {
     void loadConversations({ reset: true, preferredId: null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilter]);
