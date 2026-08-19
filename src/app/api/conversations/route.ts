@@ -14,9 +14,14 @@ export async function GET(request: Request) {
     const offset = Number(searchParams.get("offset") ?? "0");
     const limit = Number(searchParams.get("limit") ?? "25");
     const filter = searchParams.get("filter");
+    const messagesOffset = Number(searchParams.get("messagesOffset") ?? "0");
+    const messagesLimit = Number(searchParams.get("messagesLimit") ?? "40");
 
     if (conversationId) {
-      const conversation = await conversationService.getDetail(conversationId, user);
+      const conversation = await conversationService.getDetail(conversationId, user, {
+        offset: Number.isFinite(messagesOffset) && messagesOffset > 0 ? messagesOffset : 0,
+        limit: Number.isFinite(messagesLimit) && messagesLimit > 0 ? Math.min(messagesLimit, 100) : 40,
+      });
       return NextResponse.json(successResponse("Conversa consultada.", conversation));
     }
 

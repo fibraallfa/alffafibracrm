@@ -56,6 +56,12 @@ type ConversationDetail = {
   memory: Record<string, unknown>;
   botActive: boolean;
   messages: Array<{ id: string; direction: string; body: string; createdAt: string }>;
+  messagesPagination?: {
+    total: number;
+    offset: number;
+    limit: number;
+    hasMore: boolean;
+  };
 };
 
 type ConversationPayload = {
@@ -103,6 +109,7 @@ export function ConversationCenter() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSavingTags, setIsSavingTags] = useState(false);
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({ phone: "", leadName: "", firstMessage: "", ownerUserId: "" });
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -115,6 +122,7 @@ export function ConversationCenter() {
   const audioChunksRef = useRef<Blob[]>([]);
   const conversationListRef = useRef<HTMLDivElement | null>(null);
   const filterPopupRef = useRef<HTMLDivElement | null>(null);
+  const messagesScrollRef = useRef<HTMLDivElement | null>(null);
 
   async function loadConversations(params?: {
     preferredId?: string | null;
@@ -189,12 +197,48 @@ export function ConversationCenter() {
     setIsLoadingMore(false);
   }
 
-  async function loadDetail(conversationId: string) {
-    const response = await fetch(`/api/conversations?conversationId=${conversationId}`, { cache: "no-store" });
+  async function loadDetail(conversationId: string, options?: { appendOlder?: boolean }) {
+    const appendOlder = options?.appendOlder ?? false;
+    const currentOffset = appendOlder ? detail?.messagesPagination?.offset ?? 0 : 0;
+    const limit = detail?.messagesPagination?.limit ?? 40;
+    const nextOffset = appendOlder ? currentOffset + limit : 0;
+    const beforeHeight = messagesScrollRef.current?.scrollHeight ?? 0;
+    const response = await fetch(
+      `/api/conversations?conversationId=${conversationId}&messagesOffset=${nextOffset}&messagesLimit=${limit}`,
+      { cache: "no-store" },
+    );
     const result = await response.json();
     if (result.status === "success") {
-      setDetail(result.data ? normalizeConversationDetail(result.data) : null);
+      const normalized = result.data ? normalizeConversationDetail(result.data) : null;
+      setDetail((current) => {
+        if (!normalized) return null;
+        if (!appendOlder || !current || current.id !== normalized.id) {
+          return normalized;
+        }
+
+        const existingIds = new Set(current.messages.map((messageItem) => messageItem.id));
+        const olderMessages = normalized.messages.filter((messageItem) => !existingIds.has(messageItem.id));
+        return {
+          ...normalized,
+          messages: [...olderMessages, ...current.messages],
+          messagesPagination: normalized.messagesPagination,
+        };
+      });
       setSelectedId(conversationId);
+      if (appendOlder) {
+        requestAnimationFrame(() => {
+          const node = messagesScrollRef.current;
+          if (!node) return;
+          const afterHeight = node.scrollHeight;
+          node.scrollTop = afterHeight - beforeHeight + node.scrollTop;
+        });
+      } else {
+        requestAnimationFrame(() => {
+          const node = messagesScrollRef.current;
+          if (!node) return;
+          node.scrollTop = node.scrollHeight;
+        });
+      }
     }
   }
 
@@ -297,6 +341,19 @@ export function ConversationCenter() {
 
     if (distanceToBottom <= 180) {
       await loadConversations();
+    }
+  }
+
+  async function handleMessagesScroll() {
+    const node = messagesScrollRef.current;
+    if (!node || !detail?.messagesPagination?.hasMore || isLoadingOlderMessages) return;
+    if (node.scrollTop > 120) return;
+
+    setIsLoadingOlderMessages(true);
+    try {
+      await loadDetail(detail.id, { appendOlder: true });
+    } finally {
+      setIsLoadingOlderMessages(false);
     }
   }
 
@@ -694,7 +751,16 @@ export function ConversationCenter() {
               </CardHeader>
 
               <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-6">
+                <div
+                  ref={messagesScrollRef}
+                  className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-6"
+                  onScroll={() => {
+                    void handleMessagesScroll();
+                  }}
+                >
+                  {isLoadingOlderMessages ? (
+                    <p className="text-center text-xs text-muted-foreground">Carregando mensagens antigas...</p>
+                  ) : null}
                   {detail.messages.map((messageItem) => (
                     <div key={messageItem.id} className={`flex ${messageItem.direction === "inbound" ? "justify-start" : "justify-end"}`}>
                       <div className={`max-w-[78%] rounded-[20px] px-5 py-4 text-[15px] leading-6 shadow-sm ${messageItem.direction === "inbound" ? "bg-white text-slate-900" : "bg-[#0b2441] text-white"}`}>
@@ -872,6 +938,14 @@ function normalizeConversationDetail(detail: unknown): ConversationDetail {
     memory: raw.memory && typeof raw.memory === "object" && !Array.isArray(raw.memory) ? raw.memory : {},
     botActive: Boolean(raw.botActive),
     messages: Array.isArray(raw.messages) ? raw.messages.filter(Boolean) : [],
+    messagesPagination: raw.messagesPagination && typeof raw.messagesPagination === "object"
+      ? {
+          total: Number((raw.messagesPagination as { total?: unknown }).total ?? 0),
+          offset: Number((raw.messagesPagination as { offset?: unknown }).offset ?? 0),
+          limit: Number((raw.messagesPagination as { limit?: unknown }).limit ?? 40),
+          hasMore: Boolean((raw.messagesPagination as { hasMore?: unknown }).hasMore),
+        }
+      : undefined,
   };
 }
 

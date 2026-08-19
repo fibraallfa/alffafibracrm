@@ -108,11 +108,28 @@ export class ConversationService {
     };
   }
 
-  async getDetail(conversationId: string, user?: Pick<User, "id" | "role">) {
-    const conversation = await this.chatbotRepository.getConversationById(conversationId, user);
+  async getDetail(
+    conversationId: string,
+    user?: Pick<User, "id" | "role">,
+    params?: { offset?: number; limit?: number },
+  ) {
+    const offset = params?.offset ?? 0;
+    const limit = params?.limit ?? 40;
+    const conversation = await this.chatbotRepository.getConversationById(conversationId, user, {
+      skip: offset,
+      take: limit,
+    });
     if (!conversation) return null;
 
     const memory = this.parseMemory(conversation.memory);
+    const chronologicalMessages = [...conversation.messages]
+      .reverse()
+      .map((message) => ({
+        id: message.id,
+        direction: message.direction,
+        body: message.body,
+        createdAt: message.createdAt.toISOString(),
+      }));
 
     return {
       id: conversation.id,
@@ -135,12 +152,13 @@ export class ConversationService {
       tags: memory.tags ?? [],
       memory,
       botActive: !conversation.ownerUserId,
-      messages: conversation.messages.map((message) => ({
-        id: message.id,
-        direction: message.direction,
-        body: message.body,
-        createdAt: message.createdAt.toISOString(),
-      })),
+      messages: chronologicalMessages,
+      messagesPagination: {
+        total: conversation._count.messages,
+        offset,
+        limit,
+        hasMore: offset + chronologicalMessages.length < conversation._count.messages,
+      },
     };
   }
 

@@ -328,15 +328,38 @@ export class ChatbotRepository {
     });
   }
 
-  async getConversationById(id: string, user?: Pick<User, "id" | "role">) {
+  async getConversationById(
+    id: string,
+    user?: Pick<User, "id" | "role">,
+    messages?: { skip?: number; take?: number },
+  ) {
     return prisma.chatConversation.findFirst({
       where: { id, ...buildConversationAccessWhere(user) },
-      include: {
+      select: {
+        id: true,
+        phone: true,
+        state: true,
+        updatedAt: true,
+        ownerUserId: true,
+        memory: true,
         lead: true,
         agent: true,
         owner: true,
+        _count: {
+          select: {
+            messages: true,
+          },
+        },
         messages: {
-          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            direction: true,
+            body: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+          skip: messages?.skip ?? 0,
+          take: messages?.take ?? 40,
         },
       },
     });
