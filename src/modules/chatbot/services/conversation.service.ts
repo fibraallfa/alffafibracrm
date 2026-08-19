@@ -466,7 +466,6 @@ function getConversationFlowStatus(input: {
 }) {
   if (
     input.ownerUserId ||
-    !input.memory.awaitingFlowState ||
     ["START", "FINISHED", "FINISHED_UNAVAILABLE", "HUMAN_HANDOFF"].includes(input.state)
   ) {
     return { isStalled: false, stalledStageLabel: null as string | null };
@@ -487,7 +486,7 @@ function getConversationFlowStatus(input: {
 
   return {
     isStalled: true,
-    stalledStageLabel: promptLabelForState(input.memory.awaitingFlowState),
+    stalledStageLabel: promptLabelForState(input.memory.awaitingFlowState ?? input.state),
   };
 }
 
