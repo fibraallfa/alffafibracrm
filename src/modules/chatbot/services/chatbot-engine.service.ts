@@ -148,10 +148,11 @@ export class ChatbotEngineService {
       direction: "outbound",
       body: next.reply,
     });
+    const memoryWithFollowUp = prepareFollowUpMemory(next.memory, next.state);
     await this.chatbotRepository.updateConversation({
       id: conversation.id,
       state: next.state,
-      memory: next.memory as Prisma.InputJsonValue,
+      memory: memoryWithFollowUp as Prisma.InputJsonValue,
       leadId: next.leadId,
     });
 
@@ -168,7 +169,7 @@ export class ChatbotEngineService {
   }): Promise<NextBotResponse> {
     const originalText = input.message.trim();
     const text = extractedValueForState(input.state, input.extractedData) ?? originalText;
-    const memory = { ...input.memory };
+    const memory = clearFollowUpState({ ...input.memory });
     const firstName = getFirstName(memory.name);
     const messageFor = (state: string, fallback: string) => interpolate(
       flowMessage(input.agent?.flow, state, fallback),
@@ -319,7 +320,10 @@ export class ChatbotEngineService {
         };
       }
 
-      const fullName = parseFullName(text);
+      let fullName = parseFullName(text);
+      if (!fullName) {
+        fullName = parseFullName(await this.openAiService.extractLikelyFullName(text));
+      }
       if (!fullName) {
         if (shouldUseAiFallbackForState("ASK_NAME", text)) {
           const answer = await this.answerOutsideFlow({
@@ -990,6 +994,10 @@ type ChatMemory = {
   recommendedPlanId?: string;
   handoff?: boolean;
   objectionCount?: number;
+  awaitingFlowState?: string;
+  followUpStage?: number;
+  followUpLastSentAt?: string;
+  followUpClosedAt?: string;
 };
 
 type PlanCandidate = {
@@ -1373,7 +1381,61 @@ function selectPlan(text: string, plans: PlanCandidate[]) {
     return plans[numericChoice - 1];
   }
 
+  const rankedMatches = plans
+    .map((plan) => ({ plan, score: scorePlanMatch(normalized, plan) }))
+    .filter((item) => item.score > 0)
+    .sort((left, right) => right.score - left.score);
+
+  if (rankedMatches[0]) {
+    return rankedMatches[0].plan;
+  }
+
   return null;
+}
+
+function scorePlanMatch(normalizedMessage: string, plan: PlanCandidate) {
+  const haystack = normalizeText(`${plan.name} ${plan.speed} ${plan.description ?? ""}`);
+  let score = 0;
+
+  for (const token of normalizedMessage.split(" ").filter(Boolean)) {
+    if (token.length >= 3 && haystack.includes(token)) {
+      score += 2;
+    }
+  }
+
+  for (const term of collectPlanTerms(plan)) {
+    if (normalizedMessage.includes(term)) {
+      score += term.includes(" ") ? 6 : 4;
+    }
+  }
+
+  return score;
+}
+
+function collectPlanTerms(plan: PlanCandidate) {
+  const normalized = normalizeText(`${plan.name} ${plan.speed} ${plan.description ?? ""}`);
+  const terms = new Set<string>();
+
+  if (normalized.includes("super combo") || normalized.includes("combo super")) {
+    terms.add("super combo");
+    terms.add("combo super");
+  }
+
+  if (normalized.includes("combo hexa")) {
+    terms.add("combo hexa");
+    terms.add("hexa");
+  }
+
+  for (const match of normalized.match(/\b\d+\s*(?:mb|gb|giga)\b/g) ?? []) {
+    terms.add(match.replace(/\s+/g, ""));
+  }
+
+  if (normalized.includes("celular")) terms.add("celular");
+  if (normalized.includes("chip")) terms.add("chip");
+  if (normalized.includes("wifi")) terms.add("wifi");
+  if (normalized.includes("globoplay")) terms.add("globoplay");
+
+  return Array.from(terms);
 }
 
 function selectPlanByPrice(text: string, plans: PlanCandidate[]) {
@@ -1679,6 +1741,43 @@ function promptForState(state: string, firstName?: string) {
     CHOOSE_PLAN: "Qual plano você gostaria de escolher?",
   };
   return prompts[state] ?? "Me envie a próxima informação para continuarmos.";
+}
+
+function prepareFollowUpMemory(memory: ChatMemory, state: string) {
+  const next = clearFollowUpState({ ...memory });
+  if (!shouldTrackFollowUpState(state)) {
+    return next;
+  }
+
+  next.awaitingFlowState = state;
+  next.followUpStage = 0;
+  next.followUpLastSentAt = new Date().toISOString();
+  return next;
+}
+
+function clearFollowUpState(memory: ChatMemory) {
+  delete memory.awaitingFlowState;
+  delete memory.followUpStage;
+  delete memory.followUpLastSentAt;
+  delete memory.followUpClosedAt;
+  return memory;
+}
+
+function shouldTrackFollowUpState(state: string) {
+  return [
+    "ASK_CEP",
+    "ASK_NAME",
+    "ASK_DOCUMENT",
+    "ASK_BIRTH_DATE",
+    "ASK_STREET_NUMBER",
+    "ASK_COMPLEMENT",
+    "ASK_BILLING_DUE_DAY",
+    "ASK_EMAIL",
+    "RECOMMEND_PLAN",
+    "CHOOSE_PLAN",
+    "CONFIRM_DATA",
+    "CORRECTION",
+  ].includes(state);
 }
 
 function callResumePrompt(

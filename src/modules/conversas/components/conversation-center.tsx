@@ -30,6 +30,7 @@ type ConversationListItem = {
   owner: ConversationUser | null;
   tags: ConversationTag[];
   botActive: boolean;
+  isStalled?: boolean;
   hasPendingCustomerMessage: boolean;
   lastMessage: { id: string; direction: string; body: string; createdAt: string } | null;
   messages: Array<{ id: string; direction: string; body: string; createdAt: string }>;
@@ -64,9 +65,16 @@ type ConversationPayload = {
     offset: number;
     limit: number;
     hasMore: boolean;
+    summary?: {
+      unavailable: number;
+      finished: number;
+      stalled: number;
+    };
   };
   users: ConversationUser[];
 };
+
+type ConversationFilter = "all" | "unavailable" | "finished" | "stalled";
 
 const TAG_SUGGESTIONS = ["Novo lead", "Prioridade", "Retorno", "Instalação", "Venda", "Sem viabilidade"];
 const PAGE_SIZE = 20;
@@ -99,6 +107,7 @@ export function ConversationCenter() {
   const [createForm, setCreateForm] = useState({ phone: "", leadName: "", firstMessage: "", ownerUserId: "" });
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<ConversationFilter>("all");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -115,6 +124,7 @@ export function ConversationCenter() {
     const currentCount = reset ? 0 : payload?.conversations.items.length ?? 0;
     const offset = reset ? 0 : currentCount;
     const limit = params?.limitOverride ?? PAGE_SIZE;
+    const filter = params?.reset ? activeFilter : activeFilter;
 
     if (!params?.silent) {
       if (reset) {
@@ -124,7 +134,7 @@ export function ConversationCenter() {
       }
     }
 
-    const response = await fetch(`/api/conversations?offset=${offset}&limit=${limit}`, { cache: "no-store" });
+    const response = await fetch(`/api/conversations?offset=${offset}&limit=${limit}&filter=${filter}`, { cache: "no-store" });
     const result = await response.json();
     if (result.status !== "success") {
       setStatusMessage(result.message ?? "Não foi possível carregar as conversas.");
@@ -206,6 +216,11 @@ export function ConversationCenter() {
   }, [payload?.conversations.items.length, selectedId]);
 
   useEffect(() => {
+    void loadConversations({ reset: true, preferredId: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFilter]);
+
+  useEffect(() => {
     return () => {
       mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -233,6 +248,16 @@ export function ConversationCenter() {
         .includes(term),
     );
   }, [payload, search]);
+
+  const filterCards = useMemo(() => {
+    const summary = payload?.conversations.summary ?? { unavailable: 0, finished: 0, stalled: 0 };
+    return [
+      { key: "all" as const, label: "Todas", count: payload?.conversations.total ?? 0 },
+      { key: "unavailable" as const, label: "Sem cobertura", count: summary.unavailable },
+      { key: "finished" as const, label: "Completou o fluxo", count: summary.finished },
+      { key: "stalled" as const, label: "Cliente parou de responder", count: summary.stalled },
+    ];
+  }, [payload]);
 
   async function handleConversationListScroll() {
     const node = conversationListRef.current;
@@ -429,18 +454,35 @@ export function ConversationCenter() {
         <div className="rounded-md border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">{statusMessage}</div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
-        <Card className="h-[76vh] overflow-hidden">
+      <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
+        <Card className="h-[82vh] overflow-hidden rounded-[28px] border-slate-200 bg-white/95 shadow-sm">
           <CardHeader>
+            <div className="mb-4 grid gap-2">
+              {filterCards.map((filterItem) => (
+                <button
+                  key={filterItem.key}
+                  type="button"
+                  onClick={() => setActiveFilter(filterItem.key)}
+                  className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
+                    activeFilter === filterItem.key
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                      : "border-slate-200 bg-slate-50/80 hover:bg-slate-100"
+                  }`}
+                >
+                  <span className="text-sm font-medium">{filterItem.label}</span>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">{filterItem.count}</span>
+                </button>
+              ))}
+            </div>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
               <Input className="pl-9" placeholder="Pesquisar conversa, número ou etiqueta" value={search} onChange={(event) => setSearch(event.target.value)} />
             </div>
           </CardHeader>
-          <CardContent className="h-[calc(76vh-88px)]">
+          <CardContent className="h-[calc(82vh-222px)]">
             <div
               ref={conversationListRef}
-              className="h-full space-y-3 overflow-y-auto"
+              className="h-full space-y-3 overflow-y-auto pr-1"
               onScroll={() => {
                 void handleConversationListScroll();
               }}
@@ -451,7 +493,7 @@ export function ConversationCenter() {
                   key={conversation.id}
                   type="button"
                   onClick={() => void loadDetail(conversation.id)}
-                  className={`w-full rounded-lg border p-3 text-left transition ${selectedId === conversation.id ? "border-cyan-500 bg-cyan-50" : "hover:bg-muted/40"}`}
+                  className={`w-full rounded-3xl border p-4 text-left transition ${selectedId === conversation.id ? "border-cyan-500 bg-cyan-50 shadow-sm" : "hover:bg-muted/40"}`}
                 >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -492,14 +534,14 @@ export function ConversationCenter() {
           </CardContent>
         </Card>
 
-        <Card className="h-[76vh] overflow-hidden">
+        <Card className="h-[82vh] overflow-hidden rounded-[32px] border-slate-200 bg-[#efeae2] shadow-sm">
           {!detail ? (
             <CardContent className="flex h-full items-center justify-center text-sm text-muted-foreground">
               Selecione uma conversa para começar.
             </CardContent>
           ) : (
             <>
-              <CardHeader className="border-b">
+              <CardHeader className="border-b bg-white/95">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                   <div>
                     <CardTitle>{detail.lead?.name ?? detail.phone}</CardTitle>
@@ -593,11 +635,11 @@ export function ConversationCenter() {
                 </div>
               </CardHeader>
 
-              <CardContent className="flex h-[calc(76vh-210px)] flex-col">
-                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto py-4">
+              <CardContent className="flex h-[calc(82vh-210px)] flex-col p-0">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5">
                   {detail.messages.map((messageItem) => (
                     <div key={messageItem.id} className={`flex ${messageItem.direction === "inbound" ? "justify-start" : "justify-end"}`}>
-                      <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${messageItem.direction === "inbound" ? "bg-muted" : "bg-alffa-navy text-white"}`}>
+                      <div className={`max-w-[72%] rounded-[20px] px-4 py-3 text-[15px] leading-6 shadow-sm ${messageItem.direction === "inbound" ? "bg-white text-slate-900" : "bg-[#0b2441] text-white"}`}>
                         <p className="whitespace-pre-wrap break-words">{messageItem.body}</p>
                         <p className={`mt-2 text-[11px] ${messageItem.direction === "inbound" ? "text-muted-foreground" : "text-cyan-100"}`}>
                           {formatTime(messageItem.createdAt)}
@@ -641,7 +683,7 @@ export function ConversationCenter() {
                   }}
                 />
 
-                <div className="flex flex-col gap-3 border-t pt-4">
+                <div className="flex flex-col gap-3 border-t bg-white/95 px-5 py-4">
                   <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                     <span>{detail.botActive ? "Cris pode responder nesta conversa." : "Somente operador responde nesta conversa."}</span>
                     <span>•</span>
@@ -660,7 +702,7 @@ export function ConversationCenter() {
                       value={message}
                       onChange={(event) => setMessage(event.target.value)}
                       placeholder={selectedFile ? "Digite uma legenda opcional..." : "Digite sua mensagem..."}
-                      className="min-h-24 flex-1"
+                      className="min-h-28 flex-1 rounded-3xl bg-white"
                     />
                     <Button type="button" onClick={() => void sendMessage()} disabled={isSending}>
                       <Send className="h-4 w-4" />
@@ -725,6 +767,13 @@ function normalizeConversationPayload(payload: unknown): ConversationPayload {
       offset: typeof rawConversations?.offset === "number" ? rawConversations.offset : 0,
       limit: typeof rawConversations?.limit === "number" ? rawConversations.limit : PAGE_SIZE,
       hasMore: Boolean(rawConversations?.hasMore),
+      summary: rawConversations?.summary && typeof rawConversations.summary === "object"
+        ? {
+            unavailable: Number((rawConversations.summary as { unavailable?: unknown }).unavailable ?? 0),
+            finished: Number((rawConversations.summary as { finished?: unknown }).finished ?? 0),
+            stalled: Number((rawConversations.summary as { stalled?: unknown }).stalled ?? 0),
+          }
+        : { unavailable: 0, finished: 0, stalled: 0 },
     },
   };
 }
@@ -742,6 +791,7 @@ function normalizeConversationListItem(conversation: unknown): ConversationListI
     owner: raw.owner && typeof raw.owner === "object" ? raw.owner : null,
     tags: normalizeTags(raw.tags),
     botActive: Boolean(raw.botActive),
+    isStalled: Boolean(raw.isStalled),
     hasPendingCustomerMessage: Boolean(raw.hasPendingCustomerMessage),
     lastMessage: raw.lastMessage && typeof raw.lastMessage === "object" ? raw.lastMessage : null,
     messages: Array.isArray(raw.messages) ? raw.messages.filter(Boolean) : [],

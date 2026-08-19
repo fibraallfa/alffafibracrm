@@ -256,6 +256,40 @@ export class ChatbotRepository {
     });
   }
 
+  async listConversationSummaries(user?: Pick<User, "id" | "role">) {
+    return prisma.chatConversation.findMany({
+      where: buildConversationAccessWhere(user),
+      select: {
+        id: true,
+        state: true,
+        memory: true,
+        ownerUserId: true,
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+  }
+
+  async listAutoFollowUpCandidates() {
+    return prisma.chatConversation.findMany({
+      where: {
+        deletedAt: null,
+        ownerUserId: null,
+        state: {
+          notIn: ["START", "FINISHED", "FINISHED_UNAVAILABLE", "HUMAN_HANDOFF"],
+        },
+      },
+      include: {
+        agent: true,
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 500,
+    });
+  }
+
   async getConversationById(id: string, user?: Pick<User, "id" | "role">) {
     return prisma.chatConversation.findFirst({
       where: { id, ...buildConversationAccessWhere(user) },

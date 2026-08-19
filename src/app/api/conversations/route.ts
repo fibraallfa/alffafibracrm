@@ -13,6 +13,7 @@ export async function GET(request: Request) {
     const conversationId = searchParams.get("conversationId");
     const offset = Number(searchParams.get("offset") ?? "0");
     const limit = Number(searchParams.get("limit") ?? "25");
+    const filter = searchParams.get("filter");
 
     if (conversationId) {
       const conversation = await conversationService.getDetail(conversationId, user);
@@ -24,6 +25,7 @@ export async function GET(request: Request) {
         offset: Number.isFinite(offset) && offset > 0 ? offset : 0,
         limit: Number.isFinite(limit) && limit > 0 ? Math.min(limit, 100) : 25,
         user,
+        filter: filter === "unavailable" || filter === "finished" || filter === "stalled" ? filter : "all",
       }),
       conversationService.listAssignableUsers(),
     ]);

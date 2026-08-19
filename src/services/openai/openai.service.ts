@@ -17,6 +17,43 @@ export class OpenAiService {
     return response.output_text;
   }
 
+  async extractLikelyFullName(message: string) {
+    const config = await getOpenAiRuntimeConfig();
+    if (!config.apiKey) {
+      return "";
+    }
+
+    const client = new OpenAI({ apiKey: config.apiKey, timeout: 15_000, maxRetries: 0 });
+    const response = await client.responses.create({
+      model: config.model,
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: [
+                "Extraia apenas o nome completo real de uma pessoa a partir da mensagem abaixo.",
+                "Ignore explicacoes como 'meu nome e', 'nome de solteira', 'sou eu', conectivos e textos extras.",
+                "Se nao houver um nome completo humano confiavel, responda somente null.",
+                "Se houver, responda somente o nome completo em uma unica linha, sem aspas.",
+                "Nao invente, nao resuma e nao acrescente sobrenomes.",
+                `Mensagem: ${message}`,
+              ].join("\n"),
+            },
+          ],
+        },
+      ],
+    });
+
+    const value = response.output_text.trim();
+    if (!value || /^null$/i.test(value)) {
+      return "";
+    }
+
+    return value;
+  }
+
   async extractCustomerData(input: { url: string; mimeType: string }) {
     const config = await getOpenAiRuntimeConfig();
     if (!config.apiKey) return {};
