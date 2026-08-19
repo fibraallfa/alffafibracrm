@@ -464,20 +464,24 @@ function getConversationFlowStatus(input: {
   updatedAt: string;
   messages: Array<{ direction: string; createdAt: string }>;
 }) {
-  if (input.ownerUserId || !input.memory.awaitingFlowState) {
+  if (
+    input.ownerUserId ||
+    !input.memory.awaitingFlowState ||
+    ["START", "FINISHED", "FINISHED_UNAVAILABLE", "HUMAN_HANDOFF"].includes(input.state)
+  ) {
     return { isStalled: false, stalledStageLabel: null as string | null };
   }
 
   const latestInbound = input.messages.find((message) => message.direction === "inbound");
   const latestOutbound = input.messages.find((message) => message.direction === "outbound");
-  const outboundAt = latestOutbound ? new Date(latestOutbound.createdAt) : new Date(input.updatedAt);
+  const outboundAt = latestOutbound ? new Date(latestOutbound.createdAt) : null;
   const inboundAt = latestInbound ? new Date(latestInbound.createdAt) : null;
-  const stalledSince = new Date(input.memory.followUpLastSentAt ?? outboundAt.toISOString());
-  const now = Date.now();
-  const waitingForCustomer = !inboundAt || inboundAt.getTime() <= outboundAt.getTime();
-  const exceededFirstReminderWindow = now - stalledSince.getTime() >= 3 * 60_000;
+  const crisWasLastToReply = Boolean(
+    outboundAt &&
+    (!inboundAt || outboundAt.getTime() >= inboundAt.getTime()),
+  );
 
-  if (!waitingForCustomer || !exceededFirstReminderWindow) {
+  if (!crisWasLastToReply) {
     return { isStalled: false, stalledStageLabel: null as string | null };
   }
 

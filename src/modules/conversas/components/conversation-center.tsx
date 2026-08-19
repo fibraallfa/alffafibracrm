@@ -582,7 +582,7 @@ export function ConversationCenter() {
           </CardContent>
         </Card>
 
-        <Card className="h-[calc(100vh-148px)] min-h-[820px] overflow-hidden rounded-[32px] border-slate-200 bg-[#efeae2] shadow-sm">
+        <Card className="flex h-[calc(100vh-148px)] min-h-[820px] flex-col overflow-hidden rounded-[32px] border-slate-200 bg-[#efeae2] shadow-sm">
           {!detail ? (
             <CardContent className="flex h-full items-center justify-center text-sm text-muted-foreground">
               Selecione uma conversa para começar.
@@ -683,7 +683,7 @@ export function ConversationCenter() {
                 </div>
               </CardHeader>
 
-              <CardContent className="flex h-[calc(100vh-360px)] min-h-[610px] flex-col p-0">
+              <CardContent className="flex min-h-0 flex-1 flex-col p-0">
                 <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-6">
                   {detail.messages.map((messageItem) => (
                     <div key={messageItem.id} className={`flex ${messageItem.direction === "inbound" ? "justify-start" : "justify-end"}`}>
@@ -731,7 +731,7 @@ export function ConversationCenter() {
                   }}
                 />
 
-                <div className="flex flex-col gap-3 border-t bg-white/95 px-6 py-4">
+                <div className="mt-auto flex flex-col gap-3 border-t bg-white/95 px-6 py-5">
                   <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                     <span>{detail.botActive ? "Cris pode responder nesta conversa." : "Somente operador responde nesta conversa."}</span>
                     <span>•</span>
