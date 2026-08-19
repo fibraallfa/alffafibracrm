@@ -1,5 +1,6 @@
 import type { Prisma, User } from "@prisma/client";
 import { ChatbotRepository } from "@/repositories/chatbot.repository";
+import { writeTechnicalLog } from "@/lib/logger";
 import { ZapiService } from "@/services/zapi/zapi.service";
 
 type ConversationMemory = {
@@ -338,6 +339,7 @@ export class ConversationService {
     const conversations = await this.chatbotRepository.listAutoFollowUpCandidates();
     const now = new Date();
     let processed = 0;
+    let failed = 0;
 
     for (const conversation of conversations) {
       const memory = this.parseMemory(conversation.memory);
@@ -347,11 +349,33 @@ export class ConversationService {
       const message = buildFollowUpMessage(nextStep.stage, memory.awaitingFlowState ?? conversation.state);
       if (!message) continue;
 
-      await this.zapiService.sendText({
-        phone: conversation.phone,
-        message,
-        config: agentConfig(conversation.agent),
-      });
+      try {
+        await this.sendFollowUpMessage({
+          phone: conversation.phone,
+          message,
+          agent: conversation.agent,
+        });
+      } catch (error) {
+        failed += 1;
+
+        await writeTechnicalLog({
+          level: "ERROR",
+          category: "chatbot",
+          message: "Falha ao enviar lembrete automático da Cris.",
+          method: "POST",
+          endpoint: "cron/conversations-follow-up",
+          integration: "zapi",
+          metadata: {
+            conversationId: conversation.id,
+            phone: conversation.phone,
+            stage: nextStep.stage,
+            state: conversation.state,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+
+        continue;
+      }
 
       await this.chatbotRepository.saveMessage({
         conversationId: conversation.id,
@@ -375,7 +399,39 @@ export class ConversationService {
       processed += 1;
     }
 
-    return { processed };
+    return { processed, failed };
+  }
+
+  private async sendFollowUpMessage(params: {
+    phone: string;
+    message: string;
+    agent?: {
+      zapiBaseUrl?: string | null;
+      zapiInstanceId?: string | null;
+      zapiToken?: string | null;
+      zapiClientToken?: string | null;
+      zapiWhatsappNumber?: string | null;
+    } | null;
+  }) {
+    const config = agentConfig(params.agent);
+
+    try {
+      await this.zapiService.sendText({
+        phone: params.phone,
+        message: params.message,
+        config,
+      });
+      return;
+    } catch (error) {
+      if (!shouldRetryWithDefaultConfig(error, config)) {
+        throw error;
+      }
+    }
+
+    await this.zapiService.sendText({
+      phone: params.phone,
+      message: params.message,
+    });
   }
 
   private parseMemory(memory: unknown): ConversationMemory {
@@ -440,6 +496,19 @@ function clearConversationFollowUp(memory: ConversationMemory) {
   delete next.followUpLastSentAt;
   delete next.followUpClosedAt;
   return next;
+}
+
+function shouldRetryWithDefaultConfig(error: unknown, config?: ReturnType<typeof agentConfig>) {
+  if (!config || !config.instanceId || !config.token) {
+    return false;
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return message.includes("instance not found") || message.includes("status=404");
 }
 
 function getNextFollowUpStep(memory: ConversationMemory, now: Date) {
