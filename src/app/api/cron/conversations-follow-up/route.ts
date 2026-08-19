@@ -4,9 +4,16 @@ import { ConversationService } from "@/modules/chatbot/services/conversation.ser
 
 const conversationService = new ConversationService();
 
+function readSecret(request: Request) {
+  const urlSecret = new URL(request.url).searchParams.get("secret") ?? undefined;
+  const headerSecret = request.headers.get("x-cron-secret") ?? undefined;
+  const bearerToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || undefined;
+  return headerSecret || bearerToken || urlSecret;
+}
+
 export async function GET(request: Request) {
   try {
-    const secret = new URL(request.url).searchParams.get("secret") ?? undefined;
+    const secret = readSecret(request);
     const result = await conversationService.processAutoFollowUps(secret);
     return NextResponse.json(successResponse("Lembretes automáticos processados.", result));
   } catch (error) {
@@ -14,4 +21,8 @@ export async function GET(request: Request) {
       status: 500,
     });
   }
+}
+
+export async function POST(request: Request) {
+  return GET(request);
 }
