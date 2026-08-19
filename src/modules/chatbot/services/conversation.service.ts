@@ -347,53 +347,49 @@ export class ConversationService {
       if (!nextStep) continue;
 
       const message = buildFollowUpMessage(nextStep.stage, memory.awaitingFlowState ?? conversation.state);
-      if (!message) continue;
 
-      try {
-        await this.sendFollowUpMessage({
-          phone: conversation.phone,
-          message,
-          agent: conversation.agent,
-        });
-      } catch (error) {
-        failed += 1;
-
-        await writeTechnicalLog({
-          level: "ERROR",
-          category: "chatbot",
-          message: "Falha ao enviar lembrete automático da Cris.",
-          method: "POST",
-          endpoint: "cron/conversations-follow-up",
-          integration: "zapi",
-          metadata: {
-            conversationId: conversation.id,
+      if (message) {
+        try {
+          await this.sendFollowUpMessage({
             phone: conversation.phone,
-            stage: nextStep.stage,
-            state: conversation.state,
-            error: error instanceof Error ? error.message : String(error),
-          },
+            message,
+            agent: conversation.agent,
+          });
+        } catch (error) {
+          failed += 1;
+
+          await writeTechnicalLog({
+            level: "ERROR",
+            category: "chatbot",
+            message: "Falha ao enviar lembrete automático da Cris.",
+            method: "POST",
+            endpoint: "cron/conversations-follow-up",
+            integration: "zapi",
+            metadata: {
+              conversationId: conversation.id,
+              phone: conversation.phone,
+              stage: nextStep.stage,
+              state: conversation.state,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
+
+          continue;
+        }
+
+        await this.chatbotRepository.saveMessage({
+          conversationId: conversation.id,
+          direction: "outbound",
+          body: message,
+          sentAt: now,
         });
-
-        continue;
       }
-
-      await this.chatbotRepository.saveMessage({
-        conversationId: conversation.id,
-        direction: "outbound",
-        body: message,
-        sentAt: now,
-      });
 
       const nextMemory: ConversationMemory = {
         ...memory,
         followUpStage: nextStep.stage,
         followUpLastSentAt: now.toISOString(),
       };
-
-      if (nextStep.stage >= 4) {
-        nextMemory.followUpClosedAt = now.toISOString();
-        delete nextMemory.awaitingFlowState;
-      }
 
       await this.chatbotRepository.updateConversationMemory(conversation.id, nextMemory as Prisma.InputJsonValue);
       processed += 1;
@@ -586,9 +582,7 @@ function buildFollowUpMessage(stage: number, flowState: string) {
     return `Ainda não recebi sua resposta 🤔\nVocê ainda tem interesse em continuar com a contratação do plano? Vamos dar continuidade? Eu preciso que você me informe: ${prompt}.`;
   }
 
-  if (stage === 4) {
-    return "Como não tive seu retorno, este atendimento foi encerrado por falta de resposta 🙂\nMas se você ainda tiver interesse no plano, é só me chamar aqui que eu continuo seu atendimento de onde paramos 🚀";
-  }
+  if (stage === 4) return "";
 
   return "";
 }
