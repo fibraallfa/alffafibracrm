@@ -123,6 +123,8 @@ export function ConversationCenter() {
   const conversationListRef = useRef<HTMLDivElement | null>(null);
   const filterPopupRef = useRef<HTMLDivElement | null>(null);
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  const visibleCountRef = useRef(PAGE_SIZE);
 
   async function loadConversations(params?: {
     preferredId?: string | null;
@@ -248,6 +250,14 @@ export function ConversationCenter() {
   }, []);
 
   useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
+  useEffect(() => {
+    visibleCountRef.current = Math.max(payload?.conversations.items.length ?? PAGE_SIZE, PAGE_SIZE);
+  }, [payload?.conversations.items.length]);
+
+  useEffect(() => {
     const source = new EventSource("/api/conversations/stream");
 
     source.addEventListener("connected", () => {
@@ -256,10 +266,10 @@ export function ConversationCenter() {
 
     source.addEventListener("conversation-update", () => {
       void loadConversations({
-        preferredId: selectedId,
+        preferredId: selectedIdRef.current,
         reset: true,
         silent: true,
-        limitOverride: Math.max(payload?.conversations.items.length ?? PAGE_SIZE, PAGE_SIZE),
+        limitOverride: visibleCountRef.current,
       });
     });
 
@@ -270,37 +280,7 @@ export function ConversationCenter() {
     return () => {
       source.close();
     };
-  }, [detail, payload?.conversations.items.length, selectedId]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function processFollowUps() {
-      try {
-        await fetch("/api/cron/conversations-follow-up", { cache: "no-store" });
-        if (!cancelled) {
-          void loadConversations({
-            preferredId: selectedId,
-            reset: true,
-            silent: true,
-            limitOverride: Math.max(payload?.conversations.items.length ?? PAGE_SIZE, PAGE_SIZE),
-          });
-        }
-      } catch {
-        // Keep the inbox usable even if the silent follow-up trigger fails.
-      }
-    }
-
-    void processFollowUps();
-    const intervalId = window.setInterval(() => {
-      void processFollowUps();
-    }, 60_000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [payload?.conversations.items.length, selectedId]);
+  }, []);
 
   useEffect(() => {
     void loadConversations({ reset: true, preferredId: null });
