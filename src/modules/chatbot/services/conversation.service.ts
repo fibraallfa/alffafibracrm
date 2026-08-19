@@ -92,12 +92,6 @@ export class ConversationService {
               createdAt: lastMessage.createdAt.toISOString(),
             }
           : null,
-        messages: conversation.messages.map((message) => ({
-          id: message.id,
-          direction: message.direction,
-          body: message.body,
-          createdAt: message.createdAt.toISOString(),
-        })),
       };
     }).filter((conversation) => matchesConversationFilter(conversation, filter));
 

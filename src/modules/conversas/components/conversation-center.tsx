@@ -34,7 +34,6 @@ type ConversationListItem = {
   stalledStageLabel?: string | null;
   hasPendingCustomerMessage: boolean;
   lastMessage: { id: string; direction: string; body: string; createdAt: string } | null;
-  messages: Array<{ id: string; direction: string; body: string; createdAt: string }>;
 };
 
 type ConversationDetail = {
@@ -161,17 +160,28 @@ export function ConversationCenter() {
       };
     });
 
+    const previousItems = payload?.conversations.items ?? [];
     const baseItems = reset || !payload
       ? nextPayload.conversations.items
-      : [...(payload?.conversations.items ?? []), ...nextPayload.conversations.items];
+      : [...previousItems, ...nextPayload.conversations.items];
     const nextSelectedId = params && "preferredId" in params
       ? (params.preferredId ?? baseItems[0]?.id ?? null)
       : (selectedId ?? baseItems[0]?.id ?? null);
     setSelectedId(nextSelectedId);
 
-    if (nextSelectedId) {
+    const shouldRefreshDetail = Boolean(
+      nextSelectedId && (
+        reset ||
+        !detail ||
+        detail.id !== nextSelectedId ||
+        previousItems.find((item) => item.id === nextSelectedId)?.updatedAt !==
+          baseItems.find((item) => item.id === nextSelectedId)?.updatedAt
+      ),
+    );
+
+    if (nextSelectedId && shouldRefreshDetail) {
       await loadDetail(nextSelectedId);
-    } else {
+    } else if (!nextSelectedId) {
       setDetail(null);
     }
 
@@ -216,7 +226,7 @@ export function ConversationCenter() {
     return () => {
       source.close();
     };
-  }, [payload?.conversations.items.length, selectedId]);
+  }, [detail, payload?.conversations.items.length, selectedId]);
 
   useEffect(() => {
     void loadConversations({ reset: true, preferredId: null });
@@ -843,7 +853,6 @@ function normalizeConversationListItem(conversation: unknown): ConversationListI
     stalledStageLabel: typeof raw.stalledStageLabel === "string" ? raw.stalledStageLabel : null,
     hasPendingCustomerMessage: Boolean(raw.hasPendingCustomerMessage),
     lastMessage: raw.lastMessage && typeof raw.lastMessage === "object" ? raw.lastMessage : null,
-    messages: Array.isArray(raw.messages) ? raw.messages.filter(Boolean) : [],
   };
 }
 

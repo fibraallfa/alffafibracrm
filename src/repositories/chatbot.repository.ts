@@ -241,13 +241,41 @@ export class ChatbotRepository {
   async listConversations(params?: { skip?: number; take?: number; user?: Pick<User, "id" | "role"> }) {
     return prisma.chatConversation.findMany({
       where: buildConversationAccessWhere(params?.user),
-      include: {
-        lead: true,
-        agent: true,
-        owner: true,
+      select: {
+        id: true,
+        phone: true,
+        state: true,
+        updatedAt: true,
+        ownerUserId: true,
+        memory: true,
+        lead: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        agent: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+          },
+        },
         messages: {
+          select: {
+            id: true,
+            direction: true,
+            body: true,
+            createdAt: true,
+          },
           orderBy: { createdAt: "desc" },
-          take: 20,
+          take: 2,
         },
       },
       orderBy: { updatedAt: "desc" },
