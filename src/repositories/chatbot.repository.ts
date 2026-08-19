@@ -264,6 +264,16 @@ export class ChatbotRepository {
         state: true,
         memory: true,
         ownerUserId: true,
+        updatedAt: true,
+        messages: {
+          select: {
+            id: true,
+            direction: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        },
       },
       orderBy: { updatedAt: "desc" },
     });

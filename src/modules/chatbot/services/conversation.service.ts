@@ -37,6 +37,12 @@ export class ConversationService {
     const summary = buildConversationSummary(summaryRows.map((row) => ({
       state: row.state,
       memory: this.parseMemory(row.memory),
+      ownerUserId: row.ownerUserId,
+      updatedAt: row.updatedAt.toISOString(),
+      messages: row.messages.map((message) => ({
+        direction: message.direction,
+        createdAt: message.createdAt.toISOString(),
+      })),
     })));
 
     const shouldFilterManually = filter !== "all";
@@ -54,6 +60,16 @@ export class ConversationService {
       const hasPendingCustomerMessage = Boolean(
         latestInboundAt && (!latestOutboundAt || latestInboundAt.getTime() > latestOutboundAt.getTime()),
       );
+      const liveStatus = getConversationFlowStatus({
+        state: conversation.state,
+        memory,
+        ownerUserId: conversation.ownerUserId,
+        updatedAt: conversation.updatedAt.toISOString(),
+        messages: conversation.messages.map((message) => ({
+          direction: message.direction,
+          createdAt: message.createdAt.toISOString(),
+        })),
+      });
 
       return {
         id: conversation.id,
@@ -65,7 +81,8 @@ export class ConversationService {
         owner: conversation.owner ? { id: conversation.owner.id, name: conversation.owner.name, role: conversation.owner.role } : null,
         tags: memory.tags ?? [],
         botActive: !conversation.ownerUserId,
-        isStalled: Boolean(memory.followUpClosedAt),
+        isStalled: liveStatus.isStalled,
+        stalledStageLabel: liveStatus.stalledStageLabel,
         hasPendingCustomerMessage,
         lastMessage: lastMessage
           ? {
@@ -370,6 +387,9 @@ export class ConversationService {
 type ConversationSummaryRow = {
   state: string;
   memory: ConversationMemory;
+  ownerUserId: string | null;
+  updatedAt: string;
+  messages: Array<{ direction: string; createdAt: string }>;
 };
 
 function buildConversationSummary(rows: ConversationSummaryRow[]) {
@@ -378,9 +398,10 @@ function buildConversationSummary(rows: ConversationSummaryRow[]) {
   let stalled = 0;
 
   for (const row of rows) {
+    const liveStatus = getConversationFlowStatus(row);
     if (row.state === "FINISHED_UNAVAILABLE") unavailable += 1;
     if (row.state === "FINISHED") finished += 1;
-    if (typeof row.memory.followUpClosedAt === "string" && row.memory.followUpClosedAt) stalled += 1;
+    if (liveStatus.isStalled) stalled += 1;
   }
 
   return {
@@ -396,7 +417,7 @@ function matchesConversationFilter(
 ) {
   if (filter === "unavailable") return conversation.state === "FINISHED_UNAVAILABLE";
   if (filter === "finished") return conversation.state === "FINISHED";
-  if (filter === "stalled") return Boolean(conversation.isStalled || conversation.memory?.followUpClosedAt);
+  if (filter === "stalled") return Boolean(conversation.isStalled);
   return true;
 }
 
@@ -434,6 +455,36 @@ function getNextFollowUpStep(memory: ConversationMemory, now: Date) {
   }
 
   return { stage: currentStage + 1 };
+}
+
+function getConversationFlowStatus(input: {
+  state: string;
+  memory: ConversationMemory;
+  ownerUserId: string | null;
+  updatedAt: string;
+  messages: Array<{ direction: string; createdAt: string }>;
+}) {
+  if (input.ownerUserId || !input.memory.awaitingFlowState) {
+    return { isStalled: false, stalledStageLabel: null as string | null };
+  }
+
+  const latestInbound = input.messages.find((message) => message.direction === "inbound");
+  const latestOutbound = input.messages.find((message) => message.direction === "outbound");
+  const outboundAt = latestOutbound ? new Date(latestOutbound.createdAt) : new Date(input.updatedAt);
+  const inboundAt = latestInbound ? new Date(latestInbound.createdAt) : null;
+  const stalledSince = new Date(input.memory.followUpLastSentAt ?? outboundAt.toISOString());
+  const now = Date.now();
+  const waitingForCustomer = !inboundAt || inboundAt.getTime() <= outboundAt.getTime();
+  const exceededFirstReminderWindow = now - stalledSince.getTime() >= 3 * 60_000;
+
+  if (!waitingForCustomer || !exceededFirstReminderWindow) {
+    return { isStalled: false, stalledStageLabel: null as string | null };
+  }
+
+  return {
+    isStalled: true,
+    stalledStageLabel: promptLabelForState(input.memory.awaitingFlowState),
+  };
 }
 
 function buildFollowUpMessage(stage: number, flowState: string) {

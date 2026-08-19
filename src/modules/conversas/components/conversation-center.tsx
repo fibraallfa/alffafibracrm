@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Mic, Paintbrush, Paperclip, Plus, Search, Send, Square, Trash2, UserCheck, Undo2, X } from "lucide-react";
+import { Filter, Mic, Paintbrush, Paperclip, Plus, Search, Send, Square, Trash2, UserCheck, Undo2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,7 @@ type ConversationListItem = {
   tags: ConversationTag[];
   botActive: boolean;
   isStalled?: boolean;
+  stalledStageLabel?: string | null;
   hasPendingCustomerMessage: boolean;
   lastMessage: { id: string; direction: string; body: string; createdAt: string } | null;
   messages: Array<{ id: string; direction: string; body: string; createdAt: string }>;
@@ -108,11 +109,13 @@ export function ConversationCenter() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [activeFilter, setActiveFilter] = useState<ConversationFilter>("all");
+  const [isFilterPopupOpen, setIsFilterPopupOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const conversationListRef = useRef<HTMLDivElement | null>(null);
+  const filterPopupRef = useRef<HTMLDivElement | null>(null);
 
   async function loadConversations(params?: {
     preferredId?: string | null;
@@ -227,6 +230,22 @@ export function ConversationCenter() {
       if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
     };
   }, [audioPreviewUrl]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (!filterPopupRef.current?.contains(event.target as Node)) {
+        setIsFilterPopupOpen(false);
+      }
+    }
+
+    if (isFilterPopupOpen) {
+      window.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      window.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isFilterPopupOpen]);
 
   const filteredConversations = useMemo(() => {
     const list = payload?.conversations.items ?? [];
@@ -454,32 +473,56 @@ export function ConversationCenter() {
         <div className="rounded-md border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">{statusMessage}</div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
-        <Card className="h-[82vh] overflow-hidden rounded-[28px] border-slate-200 bg-white/95 shadow-sm">
+      <div className="grid gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
+        <Card className="h-[calc(100vh-148px)] min-h-[820px] overflow-hidden rounded-[28px] border-slate-200 bg-white/95 shadow-sm">
           <CardHeader>
-            <div className="mb-4 grid gap-2">
-              {filterCards.map((filterItem) => (
-                <button
-                  key={filterItem.key}
-                  type="button"
-                  onClick={() => setActiveFilter(filterItem.key)}
-                  className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
-                    activeFilter === filterItem.key
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                      : "border-slate-200 bg-slate-50/80 hover:bg-slate-100"
-                  }`}
-                >
-                  <span className="text-sm font-medium">{filterItem.label}</span>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">{filterItem.count}</span>
-                </button>
-              ))}
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900">Conversas</p>
+                <p className="text-xs text-muted-foreground">
+                  {filterCards.find((item) => item.key === activeFilter)?.label ?? "Todas"} • {filterCards.find((item) => item.key === activeFilter)?.count ?? 0}
+                </p>
+              </div>
+              <div className="relative" ref={filterPopupRef}>
+                <Button type="button" variant="outline" className="rounded-2xl" onClick={() => setIsFilterPopupOpen((current) => !current)}>
+                  <Filter className="h-4 w-4" />
+                  Filtros
+                </Button>
+                {isFilterPopupOpen ? (
+                  <div className="absolute right-0 top-12 z-20 w-72 rounded-3xl border border-slate-200 bg-white p-3 shadow-2xl">
+                    <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Filtrar conversas</div>
+                    <div className="space-y-2">
+                      {filterCards.map((filterItem) => (
+                        <button
+                          key={filterItem.key}
+                          type="button"
+                          onClick={() => {
+                            setActiveFilter(filterItem.key);
+                            setIsFilterPopupOpen(false);
+                          }}
+                          className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left transition ${
+                            activeFilter === filterItem.key
+                              ? "bg-[#0b2441] text-white"
+                              : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+                          }`}
+                        >
+                          <span className="text-sm font-medium">{filterItem.label}</span>
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${activeFilter === filterItem.key ? "bg-white/15 text-white" : "bg-white text-slate-700"}`}>
+                            {filterItem.count}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
               <Input className="pl-9" placeholder="Pesquisar conversa, número ou etiqueta" value={search} onChange={(event) => setSearch(event.target.value)} />
             </div>
           </CardHeader>
-          <CardContent className="h-[calc(82vh-222px)]">
+          <CardContent className="h-[calc(100vh-310px)] min-h-[650px]">
             <div
               ref={conversationListRef}
               className="h-full space-y-3 overflow-y-auto pr-1"
@@ -517,6 +560,11 @@ export function ConversationCenter() {
                       {conversation.botActive ? "Cris ativa" : "Assumida"}
                     </span>
                     <span className="rounded-full bg-muted px-2 py-1">{conversation.state}</span>
+                    {conversation.isStalled && conversation.stalledStageLabel ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-800">
+                        Parado em: {conversation.stalledStageLabel}
+                      </span>
+                    ) : null}
                     {conversation.tags.map((tag) => (
                       <span key={`${conversation.id}-${tag.label}`} className={`rounded-full px-2 py-1 ${tagClasses(tag.color)}`}>
                         {tag.label}
@@ -534,14 +582,14 @@ export function ConversationCenter() {
           </CardContent>
         </Card>
 
-        <Card className="h-[82vh] overflow-hidden rounded-[32px] border-slate-200 bg-[#efeae2] shadow-sm">
+        <Card className="h-[calc(100vh-148px)] min-h-[820px] overflow-hidden rounded-[32px] border-slate-200 bg-[#efeae2] shadow-sm">
           {!detail ? (
             <CardContent className="flex h-full items-center justify-center text-sm text-muted-foreground">
               Selecione uma conversa para começar.
             </CardContent>
           ) : (
             <>
-              <CardHeader className="border-b bg-white/95">
+              <CardHeader className="border-b bg-white/95 pb-4">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                   <div>
                     <CardTitle>{detail.lead?.name ?? detail.phone}</CardTitle>
@@ -635,11 +683,11 @@ export function ConversationCenter() {
                 </div>
               </CardHeader>
 
-              <CardContent className="flex h-[calc(82vh-210px)] flex-col p-0">
-                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5">
+              <CardContent className="flex h-[calc(100vh-360px)] min-h-[610px] flex-col p-0">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-6">
                   {detail.messages.map((messageItem) => (
                     <div key={messageItem.id} className={`flex ${messageItem.direction === "inbound" ? "justify-start" : "justify-end"}`}>
-                      <div className={`max-w-[72%] rounded-[20px] px-4 py-3 text-[15px] leading-6 shadow-sm ${messageItem.direction === "inbound" ? "bg-white text-slate-900" : "bg-[#0b2441] text-white"}`}>
+                      <div className={`max-w-[78%] rounded-[20px] px-5 py-4 text-[15px] leading-6 shadow-sm ${messageItem.direction === "inbound" ? "bg-white text-slate-900" : "bg-[#0b2441] text-white"}`}>
                         <p className="whitespace-pre-wrap break-words">{messageItem.body}</p>
                         <p className={`mt-2 text-[11px] ${messageItem.direction === "inbound" ? "text-muted-foreground" : "text-cyan-100"}`}>
                           {formatTime(messageItem.createdAt)}
@@ -683,7 +731,7 @@ export function ConversationCenter() {
                   }}
                 />
 
-                <div className="flex flex-col gap-3 border-t bg-white/95 px-5 py-4">
+                <div className="flex flex-col gap-3 border-t bg-white/95 px-6 py-4">
                   <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                     <span>{detail.botActive ? "Cris pode responder nesta conversa." : "Somente operador responde nesta conversa."}</span>
                     <span>•</span>
@@ -792,6 +840,7 @@ function normalizeConversationListItem(conversation: unknown): ConversationListI
     tags: normalizeTags(raw.tags),
     botActive: Boolean(raw.botActive),
     isStalled: Boolean(raw.isStalled),
+    stalledStageLabel: typeof raw.stalledStageLabel === "string" ? raw.stalledStageLabel : null,
     hasPendingCustomerMessage: Boolean(raw.hasPendingCustomerMessage),
     lastMessage: raw.lastMessage && typeof raw.lastMessage === "object" ? raw.lastMessage : null,
     messages: Array.isArray(raw.messages) ? raw.messages.filter(Boolean) : [],
