@@ -52,6 +52,7 @@ export function visualPreviewResponse(request: NextRequest): NextResponse | null
   }
 
   if (request.method === "GET" && pathname === "/api/conversations") {
+    if (request.nextUrl.searchParams.get("summaryOnly") === "1") return success({ unavailable: 0, finished: 0, stalled: 0 });
     const items = ["Marina Exemplo", "Rafael Demonstração", "Camila Exemplo"].map((name, index) => ({
       id: `demo-chat-${index}`, phone: "Contato demonstrativo", state: "ASK_NAME", updatedAt: timestamp,
       lead: { id: `demo-lead-${index}`, name }, agent: { id: "demo-agent", name: "Cris" },

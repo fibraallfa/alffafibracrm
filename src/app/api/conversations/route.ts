@@ -11,6 +11,9 @@ export async function GET(request: Request) {
     const user = await requireCurrentUser();
     const { searchParams } = new URL(request.url);
     const conversationId = searchParams.get("conversationId");
+    if (searchParams.get("summaryOnly") === "1") {
+      return NextResponse.json(successResponse("Contagens consultadas.", await conversationService.getSummary(user)));
+    }
     const offset = Number(searchParams.get("offset") ?? "0");
     const limit = Number(searchParams.get("limit") ?? "25");
     const filter = searchParams.get("filter");
@@ -30,6 +33,7 @@ export async function GET(request: Request) {
         offset: Number.isFinite(offset) && offset > 0 ? offset : 0,
         limit: Number.isFinite(limit) && limit > 0 ? Math.min(limit, 100) : 25,
         user,
+        includeSummary: searchParams.get("includeSummary") !== "0",
         filter: filter === "unavailable" || filter === "finished" || filter === "stalled" ? filter : "all",
       }),
       conversationService.listAssignableUsers(),

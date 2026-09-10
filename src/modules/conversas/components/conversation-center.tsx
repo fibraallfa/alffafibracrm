@@ -111,6 +111,8 @@ export function ConversationCenter() {
   const [isSending, setIsSending] = useState(false);
   const [isSavingTags, setIsSavingTags] = useState(false);
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [summary, setSummary] = useState<ConversationPayload["conversations"]["summary"]>();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({ phone: "", leadName: "", firstMessage: "", ownerUserId: "" });
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -126,6 +128,38 @@ export function ConversationCenter() {
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const visibleCountRef = useRef(PAGE_SIZE);
+  const listRequestRef = useRef<AbortController | null>(null);
+  const detailRequestRef = useRef<AbortController | null>(null);
+  const summaryRequestRef = useRef<AbortController | null>(null);
+  const summaryUpdatedAt = useRef(0);
+  const summaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestLoadRef = useRef(loadConversations);
+
+  async function loadSummary() {
+    if (summaryRequestRef.current) return;
+    const wait = 10_000 - (Date.now() - summaryUpdatedAt.current);
+    if (wait > 0) {
+      if (!summaryTimerRef.current) summaryTimerRef.current = setTimeout(() => {
+        summaryTimerRef.current = null;
+        void loadSummary();
+      }, wait);
+      return;
+    }
+    const controller = new AbortController();
+    summaryRequestRef.current = controller;
+    try {
+      const response = await fetch("/api/conversations?summaryOnly=1", { cache: "no-store", signal: controller.signal });
+      const result = await response.json();
+      if (result.status === "success" && !controller.signal.aborted) {
+        setSummary(result.data);
+        summaryUpdatedAt.current = Date.now();
+      }
+    } catch {
+      // Counts are supplementary: never block opening a conversation.
+    } finally {
+      if (summaryRequestRef.current === controller) summaryRequestRef.current = null;
+    }
+  }
 
   async function loadConversations(params?: {
     preferredId?: string | null;
@@ -133,6 +167,10 @@ export function ConversationCenter() {
     silent?: boolean;
     limitOverride?: number;
   }) {
+    listRequestRef.current?.abort();
+    const controller = new AbortController();
+    listRequestRef.current = controller;
+    const selectionAtStart = selectedIdRef.current;
     const reset = params?.reset ?? false;
     const currentCount = reset ? 0 : payload?.conversations.items.length ?? 0;
     const offset = reset ? 0 : currentCount;
@@ -147,7 +185,8 @@ export function ConversationCenter() {
       }
     }
 
-    const response = await fetch(`/api/conversations?offset=${offset}&limit=${limit}&filter=${filter}`, { cache: "no-store" });
+    try {
+    const response = await fetch(`/api/conversations?offset=${offset}&limit=${limit}&filter=${filter}&includeSummary=0`, { cache: "no-store", signal: controller.signal });
     const result = await response.json();
     if (result.status !== "success") {
       setStatusMessage(result.message ?? "Não foi possível carregar as conversas.");
@@ -156,7 +195,9 @@ export function ConversationCenter() {
       return;
     }
 
+    if (controller.signal.aborted) return;
     const nextPayload = normalizeConversationPayload(result.data);
+    if (nextPayload.conversations.summary) setSummary(nextPayload.conversations.summary);
     setPayload((current) => {
       if (reset || !current) {
         return nextPayload;
@@ -175,14 +216,13 @@ export function ConversationCenter() {
     const baseItems = reset || !payload
       ? nextPayload.conversations.items
       : [...previousItems, ...nextPayload.conversations.items];
-    const nextSelectedId = params && "preferredId" in params
+    const nextSelectedId = selectedIdRef.current !== selectionAtStart ? selectedIdRef.current : params && "preferredId" in params
       ? (params.preferredId ?? baseItems[0]?.id ?? null)
       : (selectedId ?? baseItems[0]?.id ?? null);
     setSelectedId(nextSelectedId);
 
     const shouldRefreshDetail = Boolean(
       nextSelectedId && (
-        reset ||
         !detail ||
         detail.id !== nextSelectedId ||
         previousItems.find((item) => item.id === nextSelectedId)?.updatedAt !==
@@ -190,27 +230,50 @@ export function ConversationCenter() {
       ),
     );
 
+    setIsLoading(false);
+    setIsLoadingMore(false);
     if (nextSelectedId && shouldRefreshDetail) {
-      await loadDetail(nextSelectedId);
+      void loadDetail(nextSelectedId);
     } else if (!nextSelectedId) {
       setDetail(null);
     }
 
-    setIsLoading(false);
-    setIsLoadingMore(false);
+    void loadSummary();
+    } catch {
+      if (!controller.signal.aborted) setStatusMessage("Não foi possível carregar as conversas. Tente novamente.");
+    } finally {
+      if (listRequestRef.current === controller) {
+        setIsLoading(false);
+        setIsLoadingMore(false);
+        listRequestRef.current = null;
+      }
+    }
   }
 
   async function loadDetail(conversationId: string, options?: { appendOlder?: boolean }) {
+    if (!options?.appendOlder && detailRequestRef.current && selectedIdRef.current === conversationId) return;
+    detailRequestRef.current?.abort();
+    const controller = new AbortController();
+    detailRequestRef.current = controller;
     const appendOlder = options?.appendOlder ?? false;
+    if (!appendOlder) {
+      selectedIdRef.current = conversationId;
+      setSelectedId(conversationId);
+      setIsLoadingDetail(true);
+      if (detail?.id !== conversationId) setDetail(null);
+    }
     const currentOffset = appendOlder ? detail?.messagesPagination?.offset ?? 0 : 0;
     const limit = detail?.messagesPagination?.limit ?? 40;
     const nextOffset = appendOlder ? currentOffset + limit : 0;
     const beforeHeight = messagesScrollRef.current?.scrollHeight ?? 0;
+    try {
     const response = await fetch(
       `/api/conversations?conversationId=${conversationId}&messagesOffset=${nextOffset}&messagesLimit=${limit}`,
-      { cache: "no-store" },
+      { cache: "no-store", signal: controller.signal },
     );
     const result = await response.json();
+    if (controller.signal.aborted) return;
+    if (result.status !== "success") throw new Error(result.message);
     if (result.status === "success") {
       const normalized = result.data ? normalizeConversationDetail(result.data) : null;
       setDetail((current) => {
@@ -243,12 +306,17 @@ export function ConversationCenter() {
         });
       }
     }
+    } catch {
+      if (!controller.signal.aborted) setStatusMessage("Não foi possível carregar as mensagens. Selecione a conversa para tentar novamente.");
+    } finally {
+      if (detailRequestRef.current === controller) {
+        setIsLoadingDetail(false);
+        detailRequestRef.current = null;
+      }
+    }
   }
 
-  useEffect(() => {
-    void loadConversations({ reset: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  latestLoadRef.current = loadConversations;
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -265,13 +333,21 @@ export function ConversationCenter() {
       setIsRealtimeConnected(true);
     });
 
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     source.addEventListener("conversation-update", () => {
-      void loadConversations({
-        preferredId: selectedIdRef.current,
-        reset: true,
-        silent: true,
-        limitOverride: visibleCountRef.current,
-      });
+      if (refreshTimer) return;
+      const refresh = () => {
+        if (listRequestRef.current) {
+          refreshTimer = setTimeout(refresh, 500);
+          return;
+        }
+        refreshTimer = null;
+        void latestLoadRef.current({
+          preferredId: selectedIdRef.current, reset: true, silent: true,
+          limitOverride: visibleCountRef.current,
+        });
+      };
+      refreshTimer = setTimeout(refresh, 500);
     });
 
     source.onerror = () => {
@@ -280,11 +356,19 @@ export function ConversationCenter() {
 
     return () => {
       source.close();
+      if (refreshTimer) clearTimeout(refreshTimer);
     };
   }, []);
 
   useEffect(() => {
     void loadConversations({ reset: true, preferredId: null });
+    return () => {
+      listRequestRef.current?.abort();
+      detailRequestRef.current?.abort();
+      summaryRequestRef.current?.abort();
+      if (summaryTimerRef.current) clearTimeout(summaryTimerRef.current);
+      summaryTimerRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilter]);
 
@@ -334,14 +418,14 @@ export function ConversationCenter() {
   }, [payload, search]);
 
   const filterCards = useMemo(() => {
-    const summary = payload?.conversations.summary ?? { unavailable: 0, finished: 0, stalled: 0 };
+    const counts = summary ?? { unavailable: undefined, finished: undefined, stalled: undefined };
     return [
       { key: "all" as const, label: "Todas", count: payload?.conversations.total ?? 0 },
-      { key: "unavailable" as const, label: "Sem cobertura", count: summary.unavailable },
-      { key: "finished" as const, label: "Completou o fluxo", count: summary.finished },
-      { key: "stalled" as const, label: "Cliente parou de responder", count: summary.stalled },
+      { key: "unavailable" as const, label: "Sem cobertura", count: counts.unavailable },
+      { key: "finished" as const, label: "Completou o fluxo", count: counts.finished },
+      { key: "stalled" as const, label: "Cliente parou de responder", count: counts.stalled },
     ];
-  }, [payload]);
+  }, [payload, summary]);
 
   async function handleConversationListScroll() {
     const node = conversationListRef.current;
@@ -586,7 +670,7 @@ export function ConversationCenter() {
                         >
                           <span className="text-sm font-medium">{filterItem.label}</span>
                           <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${activeFilter === filterItem.key ? "bg-white/15 text-white" : "bg-white text-slate-700"}`}>
-                            {filterItem.count}
+                            {filterItem.count ?? "..."}
                           </span>
                         </button>
                       ))}
@@ -664,7 +748,7 @@ export function ConversationCenter() {
         <Card className="wa-chat-panel">
           {!detail ? (
             <CardContent className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              <div className="space-y-4 text-center"><MessageCircleMore className="mx-auto h-14 w-14 text-primary/40" /><p className="text-xl font-semibold">Suas conversas, mais próximas.</p><p>Selecione um contato para começar.</p></div>
+              <div className="space-y-4 text-center"><MessageCircleMore className="mx-auto h-14 w-14 text-primary/40" /><p className="text-xl font-semibold">{isLoadingDetail ? "Carregando mensagens..." : "Suas conversas, mais próximas."}</p><p>{isLoadingDetail ? "Aguarde enquanto abrimos esta conversa." : "Selecione um contato para começar."}</p></div>
             </CardContent>
           ) : (
             <>
@@ -916,7 +1000,7 @@ function normalizeConversationPayload(payload: unknown): ConversationPayload {
             finished: Number((rawConversations.summary as { finished?: unknown }).finished ?? 0),
             stalled: Number((rawConversations.summary as { stalled?: unknown }).stalled ?? 0),
           }
-        : { unavailable: 0, finished: 0, stalled: 0 },
+        : undefined,
     },
   };
 }

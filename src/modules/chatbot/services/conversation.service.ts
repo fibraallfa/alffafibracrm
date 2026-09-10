@@ -30,28 +30,31 @@ export class ConversationService {
     limit?: number;
     user?: Pick<User, "id" | "role">;
     filter?: "all" | "unavailable" | "finished" | "stalled";
+    includeSummary?: boolean;
   }) {
     const filter = params?.filter ?? "all";
     const offset = params?.offset ?? 0;
     const limit = params?.limit ?? 25;
-    const summaryRows = await this.chatbotRepository.listConversationSummaries(params?.user);
-    const summary = buildConversationSummary(summaryRows.map((row) => ({
-      state: row.state,
-      memory: this.parseMemory(row.memory),
-      ownerUserId: row.ownerUserId,
-      updatedAt: row.updatedAt.toISOString(),
-      messages: row.messages.map((message) => ({
-        direction: message.direction,
-        createdAt: message.createdAt.toISOString(),
-      })),
-    })));
-
     const shouldFilterManually = filter !== "all";
-    const conversations = await this.chatbotRepository.listConversations({
-      skip: shouldFilterManually ? 0 : offset,
-      take: shouldFilterManually ? 500 : limit,
-      user: params?.user,
-    });
+    // First-page requests do not need to scan the entire inbox for badge counts.
+    const summaryRows = shouldFilterManually || params?.includeSummary !== false
+      ? await this.getSummaryRows(params?.user)
+      : null;
+    const summary = summaryRows ? buildConversationSummary(summaryRows) : undefined;
+    const matchingRows = shouldFilterManually ? summaryRows!.filter((row) => matchesConversationFilter({
+      state: row.state, isStalled: getConversationFlowStatus(row).isStalled,
+    }, filter)) : null;
+    const [conversations, total] = await Promise.all([
+      this.chatbotRepository.listConversations({
+        skip: shouldFilterManually ? 0 : offset,
+        take: limit,
+        ...(matchingRows ? { ids: matchingRows.slice(offset, offset + limit).map((row) => row.id) } : {}),
+        user: params?.user,
+      }),
+      matchingRows ? Promise.resolve(matchingRows.length)
+        : summaryRows ? Promise.resolve(summaryRows.length)
+        : this.chatbotRepository.countConversations(params?.user),
+    ]);
 
     const allItems = conversations.map((conversation) => {
       const memory = this.parseMemory(conversation.memory);
@@ -94,10 +97,9 @@ export class ConversationService {
             }
           : null,
       };
-    }).filter((conversation) => matchesConversationFilter(conversation, filter));
+    });
 
-    const items = shouldFilterManually ? allItems.slice(offset, offset + limit) : allItems;
-    const total = shouldFilterManually ? allItems.length : summaryRows.length;
+    const items = allItems;
 
     return {
       items,
@@ -107,6 +109,19 @@ export class ConversationService {
       hasMore: offset + items.length < total,
       summary,
     };
+  }
+
+  private async getSummaryRows(user?: Pick<User, "id" | "role">) {
+    const rows = await this.chatbotRepository.listConversationSummaries(user);
+    return rows.map((row) => ({
+      id: row.id, state: row.state, memory: {},
+      ownerUserId: row.ownerUserId, updatedAt: row.updatedAt.toISOString(),
+      messages: row.messages.map((message) => ({ direction: message.direction, createdAt: message.createdAt.toISOString() })),
+    }));
+  }
+
+  async getSummary(user: Pick<User, "id" | "role">) {
+    return buildConversationSummary(await this.getSummaryRows(user));
   }
 
   async getDetail(

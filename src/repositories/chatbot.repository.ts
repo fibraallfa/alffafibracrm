@@ -238,9 +238,9 @@ export class ChatbotRepository {
     });
   }
 
-  async listConversations(params?: { skip?: number; take?: number; user?: Pick<User, "id" | "role"> }) {
+  async listConversations(params?: { skip?: number; take?: number; ids?: string[]; user?: Pick<User, "id" | "role"> }) {
     return prisma.chatConversation.findMany({
-      where: buildConversationAccessWhere(params?.user),
+      where: { ...buildConversationAccessWhere(params?.user), ...(params?.ids ? { id: { in: params.ids } } : {}) },
       select: {
         id: true,
         phone: true,
@@ -290,7 +290,6 @@ export class ChatbotRepository {
       select: {
         id: true,
         state: true,
-        memory: true,
         ownerUserId: true,
         updatedAt: true,
         messages: {
