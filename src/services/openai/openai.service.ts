@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getOpenAiRuntimeConfig } from "@/lib/integration-config";
 
 const interpretationSchema = z.object({
-  intent: z.enum(["answer", "question", "objection", "wait", "decline", "correction", "unclear"]),
+  intent: z.enum(["answer", "question", "objection", "wait", "decline", "stop", "resume", "correction", "unclear"]),
   value: z.string().nullable(),
   question: z.string().nullable(),
 });
@@ -31,6 +31,7 @@ export class OpenAiService {
           "RECOMMEND_PLAN e CHOOSE_PLAN: escolha explicita ou aceite de plano; CONFIRM_DATA: confirmacao explicita dos dados. Uma pergunta sobre um plano nao e escolha.",
           "Em CORRECTION, answer exige um campo identificado e seu novo valor explicito; value deve preservar o trecho inteiro com campo e valor. Pedir uma correcao sem informar o valor e unclear.",
           "question: duvida; objection: preocupacao ou resistencia; wait: pede tempo; decline: recusa; correction: pede corrigir dado anterior; unclear: ambiguo.",
+          "stop: pedido explicito para encerrar atendimento, parar contato ou nao insistir; nunca confundir perguntas sobre cancelar um plano com stop. resume: quer retomar atendimento, sem fornecer o dado da etapa. 'nao quero esse plano' e decline, mas 'pare de me mandar mensagens' e stop.",
           "Em question/objection/wait/decline/correction/unclear, value deve ser null. Nunca trate numeros em perguntas como dados de cadastro.",
           "Se houver resposta E pergunta (ex: 'Sou Joao da Silva, tem fidelidade?'), intent=answer, value='Joao da Silva', question='tem fidelidade?'.",
           "Exemplos obrigatorios em ASK_NAME: 'quero uma internet mais barata' => objection/value=null; 'quero saber da instalacao' => question/value=null; 'Pode ser amanha' => unclear/value=null; 'Meu nome e Ana Souza' => answer/value='Ana Souza'.",
@@ -43,7 +44,7 @@ export class OpenAiService {
           schema: {
             type: "object", additionalProperties: false,
             properties: {
-              intent: { type: "string", enum: ["answer", "question", "objection", "wait", "decline", "correction", "unclear"] },
+              intent: { type: "string", enum: ["answer", "question", "objection", "wait", "decline", "stop", "resume", "correction", "unclear"] },
               value: { type: ["string", "null"] },
               question: { type: ["string", "null"] },
             },

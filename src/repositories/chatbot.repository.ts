@@ -1,8 +1,32 @@
 import { Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { publishConversationEvent } from "@/server/realtime/conversation-events";
+import { withInboundLock } from "@/server/realtime/inbound-lock";
 
 export class ChatbotRepository {
+  withInboundLock<T>(phone: string, work: () => Promise<T>) {
+    return withInboundLock(phone, work);
+  }
+
+  async hasResponseToProviderId(conversationId: string, providerId: string) {
+    return Boolean(await prisma.chatMessage.findFirst({
+      where: { conversationId, direction: "outbound", rawPayload: { path: ["responseToProviderId"], equals: providerId } },
+      select: { id: true },
+    }));
+  }
+
+  async saveBotReply(input: { conversationId: string; body: string; responseToProviderId?: string; state: string; memory: Prisma.InputJsonValue; leadId?: string }) {
+    // Persist reply receipt and state together so retries cannot see only half the update.
+    await prisma.$transaction([
+      prisma.chatMessage.create({ data: { conversationId: input.conversationId, direction: "outbound", body: input.body,
+        rawPayload: input.responseToProviderId ? { responseToProviderId: input.responseToProviderId } : {},
+      } }),
+      prisma.chatConversation.update({ where: { id: input.conversationId }, data: {
+        state: input.state, memory: input.memory, leadId: input.leadId, updatedAt: new Date(),
+      } }),
+    ]);
+    await publishConversationEvent({ conversationId: input.conversationId, type: "outbound_message" });
+  }
   async findMessageByProviderId(providerId: string) {
     return prisma.chatMessage.findFirst({
       where: { providerId },

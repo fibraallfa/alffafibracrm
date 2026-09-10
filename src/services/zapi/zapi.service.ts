@@ -150,6 +150,7 @@ export class ZapiService {
             ...(zapiConfig.clientToken ? { "Client-Token": zapiConfig.clientToken } : {}),
           },
           body: JSON.stringify(body),
+          signal: AbortSignal.timeout(2_000),
         },
       );
 

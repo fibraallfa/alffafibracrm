@@ -523,7 +523,7 @@ function shouldRetryWithDefaultConfig(error: unknown, config?: ReturnType<typeof
 }
 
 function getNextFollowUpStep(memory: ConversationMemory, now: Date) {
-  if (!memory.awaitingFlowState || memory.followUpClosedAt) {
+  if (!memory.awaitingFlowState || memory.followUpClosedAt || memory.followUpPaused || memory.salesPaused) {
     return null;
   }
 

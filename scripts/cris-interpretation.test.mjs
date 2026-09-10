@@ -43,7 +43,8 @@ test('price objection does not become a name and stays in context', async () => 
   assert.equal(next.memory.name, undefined);
   assert.deepEqual(next.memory.customerRemarks, ['quero uma internet mais barata']);
   assert.match(calls[0].context, /Qual é o seu nome completo/);
-  assert.match(calls[1], /quero uma internet mais barata/);
+  assert.equal(next.memory.objectionCount, 1);
+  assert.match(next.reply, /valor, o plano/);
 });
 
 test('even a classifier mistake cannot save a product phrase as a name', async () => {
@@ -75,7 +76,7 @@ test('name and question are both handled', async () => {
   const { engine } = setup({ intent: 'answer', value: 'João da Silva', question: 'tem fidelidade?' });
   const next = await engine.nextResponse(input('ASK_NAME', 'Sou João da Silva, tem fidelidade?'));
   assert.equal(next.state, 'ASK_DOCUMENT');
-  assert.match(next.reply, /^Vamos esclarecer sua dúvida/);
+  assert.match(next.reply, /fidelidade.*após o cadastro/);
   assert.match(next.reply, /CPF ou CNPJ/);
   assert.equal(next.memory.name.includes('fidelidade'), false);
 });

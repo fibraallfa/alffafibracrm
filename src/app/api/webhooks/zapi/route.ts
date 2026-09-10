@@ -8,6 +8,7 @@ import { OpenAiService, type ExtractedCustomerData } from "@/services/openai/ope
 
 const chatbotEngineService = new ChatbotEngineService();
 const openAiService = new OpenAiService();
+export const maxDuration = 120;
 
 type ZapiWebhookPayload = {
   instanceId?: string;
@@ -76,17 +77,17 @@ export async function POST(request: Request) {
   try {
     const rawPayload = (await request.json()) as ZapiWebhookPayload;
     const payload = unwrapWebhookPayload(rawPayload);
-    const ip = request.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
-    const rateLimit = checkRateLimit(`zapi:${ip}`, 120, 60_000);
+    if (payload.fromMe || payload.isGroup) {
+      return NextResponse.json(successResponse("Mensagem propria ignorada.", { ignored: true }));
+    }
+    // Provider IPs are shared by many customers; one busy contact must not block others.
+    const senderKey = String(payload.phone ?? payload.sender ?? payload.from ?? "unknown").replace(/\D/g, "");
+    const rateLimit = checkRateLimit(`zapi:${payload.instanceId ?? "default"}:${senderKey}`, 120, 60_000);
 
     if (!rateLimit.allowed) {
       return NextResponse.json(errorResponse("Limite de webhooks excedido.", "RATE_LIMITED"), {
         status: 429,
       });
-    }
-
-    if (payload.fromMe || payload.isGroup) {
-      return NextResponse.json(successResponse("Mensagem propria ignorada.", { ignored: true }));
     }
 
     const phone = payload.phone ?? payload.sender ?? payload.from;
