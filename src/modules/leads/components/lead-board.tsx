@@ -839,7 +839,7 @@ function LeadCreateModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40">
+    <div className="fixed inset-0 z-50 !m-0 bg-black/40">
       <div className="ml-auto flex h-full w-full max-w-2xl flex-col border-l bg-background shadow-xl">
         <div className="flex items-start justify-between gap-4 border-b p-5">
           <div>
@@ -1002,7 +1002,7 @@ function LeadDetailPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40">
+    <div className="fixed inset-0 z-50 !m-0 bg-black/40">
       <div className="ml-auto flex h-full w-full max-w-2xl flex-col border-l bg-background shadow-xl">
         <div className="flex items-start justify-between gap-4 border-b p-5">
           <div className="min-w-0">
