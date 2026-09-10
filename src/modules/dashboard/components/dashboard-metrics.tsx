@@ -40,6 +40,7 @@ export function DashboardMetrics({ data, loading }: { data: DashboardMetricsData
       />
       <MetricCard
         title="Leads Fechados"
+        tone="teal"
         value={loading ? "..." : String(data?.wonLeads ?? 0)}
         helper="Movidos para Fechado"
         icon={icons.wonLeads}
@@ -47,6 +48,7 @@ export function DashboardMetrics({ data, loading }: { data: DashboardMetricsData
       />
       <MetricCard
         title="Valor Total"
+        tone="indigo"
         value={loading ? "..." : currency.format(data?.totalValue ?? 0)}
         helper="Planos fechados"
         icon={icons.totalValue}
@@ -55,6 +57,7 @@ export function DashboardMetrics({ data, loading }: { data: DashboardMetricsData
       {showExpenses ? (
         <MetricCard
           title="Despesas"
+          tone="amber"
           value={loading ? "..." : currency.format(data?.expenses ?? 0)}
           helper="A pagar"
           icon={icons.expenses}

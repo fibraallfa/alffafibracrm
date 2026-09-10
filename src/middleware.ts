@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { authCookieName, verifyAuthToken } from "@/lib/jwt";
+import { visualPreviewResponse } from "@/lib/visual-preview";
 
 const publicRoutes = [
   "/login",
@@ -11,6 +12,8 @@ const publicRoutes = [
 ];
 
 export async function middleware(request: NextRequest) {
+  const preview = visualPreviewResponse(request);
+  if (preview) return preview;
   const pathname = request.nextUrl.pathname;
 
   if (publicRoutes.some((route) => pathname.startsWith(route))) {
