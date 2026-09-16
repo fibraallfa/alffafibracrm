@@ -2,6 +2,7 @@ import { Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { publishConversationEvent } from "@/server/realtime/conversation-events";
 import { withInboundLock } from "@/server/realtime/inbound-lock";
+import { GIOVANA_AGENT_ID } from "@/config/giovana";
 
 export class ChatbotRepository {
   withInboundLock<T>(phone: string, work: () => Promise<T>) {
@@ -60,8 +61,8 @@ export class ChatbotRepository {
       return existingForAgent;
     }
 
-    const existing = await prisma.chatConversation.findFirst({
-      where: { phone, deletedAt: null },
+    const existing = agentId === GIOVANA_AGENT_ID ? null : await prisma.chatConversation.findFirst({
+      where: { phone, deletedAt: null, ...(agentId ? { agentId: null } : {}) },
       include: { messages: { orderBy: { createdAt: "desc" }, take: 10 }, owner: true, lead: true, agent: true },
       orderBy: { updatedAt: "desc" },
     });
@@ -181,9 +182,14 @@ export class ChatbotRepository {
     planName?: string;
     expectedValue?: number;
     notes?: string;
+    source?: string;
   }) {
     const existing = await prisma.lead.findFirst({
-      where: { phone: input.phone, deletedAt: null },
+      where: { phone: input.phone, deletedAt: null,
+        ...(input.source === "chatbot:giovana"
+          ? { source: "chatbot:giovana" }
+          : { source: { not: "chatbot:giovana" } }),
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -205,7 +211,7 @@ export class ChatbotRepository {
       planName: input.planName,
       planValue: input.expectedValue,
       expectedValue: input.expectedValue,
-      source: "chatbot",
+      source: input.source ?? "chatbot",
       notes: input.notes,
     };
 

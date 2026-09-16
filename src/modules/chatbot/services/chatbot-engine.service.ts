@@ -5,6 +5,7 @@ import { OpenAiService } from "@/services/openai/openai.service";
 import type { ExtractedCustomerData } from "@/services/openai/openai.service";
 import { ZapiService } from "@/services/zapi/zapi.service";
 import { onlyDigits } from "@/utils/mask";
+import { GIOVANA_AGENT_ID, giovanaPlans } from "@/config/giovana";
 
 const VALID_BILLING_DAYS = [5, 8, 10, 15, 20, 25];
 const LOYALTY_GUIDANCE = "As condições de fidelidade podem variar conforme a oferta e poderão ser consultadas após o cadastro, antes de você confirmar a contratação.";
@@ -40,7 +41,7 @@ export class ChatbotEngineService {
     const phone = normalizeWhatsappPhone(input.phone);
     const agent = await this.chatbotRepository.getAgentByInstance(input.instanceId);
     const conversation = await this.chatbotRepository.findOrCreateConversation(phone, agent?.id);
-    const eventId = input.providerId ? `call:${input.providerId}` : undefined;
+    const eventId = input.providerId ? `call:${agent?.id === GIOVANA_AGENT_ID ? `${agent.id}:` : ""}${input.providerId}` : undefined;
 
     if (eventId) {
       const existing = await this.chatbotRepository.findMessageByProviderId(eventId);
@@ -94,14 +95,17 @@ export class ChatbotEngineService {
     instanceId?: string; extractedData?: ExtractedCustomerData;
   }) {
     const phone = normalizeWhatsappPhone(input.phone);
+    const agent = await this.chatbotRepository.getAgentByInstance(input.instanceId);
+    const providerKey = input.providerId && agent?.id === GIOVANA_AGENT_ID
+      ? `${agent.id}:${input.providerId}` : input.providerId;
     let alreadyReceived = false;
 
-    if (input.providerId) {
-      const existingMessage = await this.chatbotRepository.findMessageByProviderId(input.providerId);
+    if (providerKey) {
+      const existingMessage = await this.chatbotRepository.findMessageByProviderId(providerKey);
       if (existingMessage) {
         const alreadyReplied = await this.chatbotRepository.hasResponseToProviderId(
           existingMessage.conversationId,
-          input.providerId,
+          providerKey,
         );
         if (alreadyReplied) {
           return { state: "DUPLICATED", replied: false, delayMs: 0 };
@@ -110,14 +114,13 @@ export class ChatbotEngineService {
       }
     }
 
-    const agent = await this.chatbotRepository.getAgentByInstance(input.instanceId);
     const conversation = await this.chatbotRepository.findOrCreateConversation(phone, agent?.id);
 
     if (!alreadyReceived && input.providerId) {
       const claimed = await this.chatbotRepository.claimInboundMessage({
         conversationId: conversation.id,
         body: input.message,
-        providerId: input.providerId,
+        providerId: providerKey!,
         rawPayload: input.rawPayload ?? {},
       });
       if (!claimed) {
@@ -148,7 +151,7 @@ export class ChatbotEngineService {
       agent,
       extractedData: input.extractedData,
       history: [...conversation.messages].reverse().map((message) => ({
-        role: message.direction === "inbound" ? "cliente" : "Cris",
+        role: message.direction === "inbound" ? "cliente" : (agent?.name ?? "Cris"),
         text: message.body.slice(0, 1600),
       })),
     });
@@ -170,7 +173,7 @@ export class ChatbotEngineService {
     await this.chatbotRepository.saveBotReply({
       conversationId: conversation.id,
       body: next.reply,
-      responseToProviderId: input.providerId,
+      responseToProviderId: providerKey,
       state: next.state,
       memory: memoryWithFollowUp as Prisma.InputJsonValue,
       leadId: next.leadId,
@@ -298,7 +301,7 @@ export class ChatbotEngineService {
 
     if (asksForExplicitPlanRecommendation(text)) {
       const plans = await this.getPlans(input.agent);
-      const recommended = findRecommendedPlan(plans);
+      const recommended = findRecommendedPlan(plans, input.agent?.rules);
       const recommendation = recommended
         ? `Para essa necessidade, recomendo o ${recommended.name} por ${formatMoney(Number(recommended.price))} + Globoplay (GRÁTIS). É a opção mais completa entre os planos disponíveis. 😊`
         : "No momento não há planos ativos vinculados a este atendimento.";
@@ -673,7 +676,7 @@ export class ChatbotEngineService {
       }
       memory.email = email;
       const plans = await this.getPlans(input.agent);
-      const recommended = findRecommendedPlan(plans);
+      const recommended = findRecommendedPlan(plans, input.agent?.rules);
       memory.recommendedPlanId = recommended?.id;
       return {
         state: "RECOMMEND_PLAN",
@@ -684,7 +687,7 @@ export class ChatbotEngineService {
 
     if (input.state === "RECOMMEND_PLAN") {
       const plans = await this.getPlans(input.agent);
-      const recommended = plans.find((plan) => plan.id === memory.recommendedPlanId) ?? findRecommendedPlan(plans);
+      const recommended = plans.find((plan) => plan.id === memory.recommendedPlanId) ?? findRecommendedPlan(plans, input.agent?.rules);
 
       if (isPositive(text) && recommended) {
         return this.selectPlanAndConfirm({ memory, plan: recommended });
@@ -751,7 +754,8 @@ export class ChatbotEngineService {
           planId: memory.planId,
           planName: memory.planName,
           expectedValue: memory.planValue,
-          notes: "Lead finalizado pelo fluxo do chatbot Cris.",
+          source: input.agent?.id === GIOVANA_AGENT_ID ? "chatbot:giovana" : "chatbot",
+          notes: `Lead finalizado pelo fluxo do chatbot ${input.agent?.name ?? "Cris"}.`,
         });
 
         return {
@@ -834,6 +838,11 @@ export class ChatbotEngineService {
 
   private async getPlans(agent: Awaited<ReturnType<ChatbotRepository["getAgentByInstance"]>>) {
     if (!agent) return this.chatbotRepository.listActivePlans();
+    if (agent.id === GIOVANA_AGENT_ID) {
+      const plans = await this.chatbotRepository.listActivePlans(agent.id);
+      return plans.filter((plan) => giovanaPlans.some((allowed) =>
+        allowed.id === plan.id && allowed.name === plan.name && allowed.price === Number(plan.price)));
+    }
     return this.chatbotRepository.listActivePlans(agent.id);
   }
 
@@ -1408,7 +1417,12 @@ function formatPlanList(plans: PlanCandidate[]) {
   return plans.map((plan) => `✅ ${plan.name} → ${formatMoney(Number(plan.price))} + Globoplay (GRÁTIS)`).join("\n");
 }
 
-function findRecommendedPlan(plans: PlanCandidate[]) {
+function findRecommendedPlan(plans: PlanCandidate[], rules?: unknown) {
+  const configuredId = rules && typeof rules === "object" && "recommendedPlanId" in rules
+    ? rules.recommendedPlanId : undefined;
+  if (typeof configuredId === "string") {
+    return plans.find((plan) => plan.id === configuredId);
+  }
   const comboSuper = plans.find((plan) => {
     const normalizedName = normalizeText(plan.name);
     const normalizedSpeed = normalizeText(plan.speed);
@@ -1434,6 +1448,18 @@ function findRecommendedPlan(plans: PlanCandidate[]) {
 
 function selectPlan(text: string, plans: PlanCandidate[]) {
   const normalized = normalizeText(text);
+  if (plans.length && plans.every((plan) => giovanaPlans.some(({ id }) => id === plan.id))) {
+    const speed = normalized.match(/\b(350|500|600|1000)\s*(?:mb|mega|megas)?\b/)?.[1]
+      ?? (/\b(?:1\s*(?:gb|giga)|um giga)\b/.test(normalized) ? "1000" : undefined);
+    if (speed) {
+      return plans.find((plan) => speed === "1000" ? plan.speed.startsWith("1Gb") : plan.speed.startsWith(speed)) ?? null;
+    }
+    if (/\boferta especial\b/.test(normalized)) return plans.find((plan) => plan.id === giovanaPlans[1].id) ?? null;
+    const price = selectPlanByPrice(text, plans);
+    if (price) return price;
+    const choice = normalized.match(/^(?:(?:opcao|plano|numero)\s*)?([1-4])$/)?.[1];
+    return choice ? plans[Number(choice) - 1] ?? null : null;
+  }
   const comboHexa = plans.find((plan) => normalizeText(plan.name).includes("combo hexa"));
   if (
     comboHexa &&

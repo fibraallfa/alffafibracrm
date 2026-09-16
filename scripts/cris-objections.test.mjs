@@ -74,6 +74,7 @@ test('unanswered retry is not discarded because a different message got a respon
 
 test('already answered provider ID is ignored without generating a new response', async () => {
   const engine = new ChatbotEngineService({}, {
+    async getAgentByInstance() { return null; },
     async withInboundLock(phone, work) { return work(); },
     async findMessageByProviderId() { return { conversationId: 'c1' }; },
     async hasResponseToProviderId() { return true; },

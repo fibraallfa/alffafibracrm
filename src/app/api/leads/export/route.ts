@@ -7,6 +7,7 @@ import { requireCurrentUser } from "@/lib/auth-context";
 import { assertPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { permissions } from "@/constants/permissions";
+import { leadSourceLabel } from "@/modules/leads/types/lead-source";
 
 export async function GET() {
   try {
@@ -27,7 +28,7 @@ export async function GET() {
       CPF: lead.cpfCnpj ?? "",
       DataNascimento: lead.birthDate?.toISOString().slice(0, 10) ?? "",
       Status: lead.kanbanStage?.name ?? lead.status,
-      Origem: lead.source,
+      Origem: leadSourceLabel(lead.source),
       Rua: lead.address ?? "",
       Numero: lead.streetNumber ?? "",
       Complemento: lead.complement ?? "",

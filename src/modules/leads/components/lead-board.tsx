@@ -1,4 +1,5 @@
 "use client";
+import { leadSourceLabel } from "@/modules/leads/types/lead-source";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CalendarClock, Check, Download, Eye, LayoutGrid, List, MessageCircle, MessageSquareText, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
@@ -150,6 +151,7 @@ export function LeadBoard() {
       (!createdFilter || createdFilter !== "today" || lead.createdAt?.slice(0, 10) === today) &&
       [
         lead.name,
+        leadSourceLabel(lead.source),
         lead.phone,
         lead.email,
         lead.cpfCnpj,
@@ -629,6 +631,7 @@ function TableView({
                 <tr key={lead.id}>
                   <td className="px-3 py-3">
                     <p className="font-medium">{lead.name}</p>
+                    <span className="mt-1 inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-200">{leadSourceLabel(lead.source)}</span>
                   </td>
                   <td className="px-3 py-3 text-xs text-muted-foreground">{lead.phone}</td>
                   <td className="px-3 py-3 text-xs text-muted-foreground">
@@ -773,6 +776,7 @@ function LeadCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate font-medium">{lead.name}</p>
+          <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-200">{leadSourceLabel(lead.source)}</span>
           <p className="text-muted-foreground">{lead.phone}</p>
         </div>
         <div className="flex shrink-0 gap-1">
@@ -1008,6 +1012,7 @@ function LeadDetailPanel({
           <div className="min-w-0">
             <p className="text-xs uppercase text-muted-foreground">Detalhes do lead</p>
             <h2 className="truncate text-xl font-semibold">{lead?.name ?? "Carregando"}</h2>
+            {lead && <p className="text-sm font-medium text-primary">Origem: {leadSourceLabel(lead.source)}</p>}
             <p className="text-sm text-muted-foreground">{lead?.phone ?? "Buscando informacoes"}</p>
           </div>
           <Button aria-label="Fechar detalhes" size="sm" variant="ghost" type="button" onClick={onClose}>
@@ -1051,7 +1056,7 @@ function LeadDetailPanel({
               <section className="rounded-md border p-4">
                 <h3 className="flex items-center gap-2 text-sm font-semibold">
                   <MessageSquareText className="h-4 w-4" aria-hidden="true" />
-                  Conversas da Cris
+                  Conversas do atendimento
                 </h3>
                 <div className="mt-3 space-y-3">
                   {lead.conversations.length ? (
@@ -1065,7 +1070,7 @@ function LeadDetailPanel({
                           {conversation.messages.map((message) => (
                             <div key={message.id} className="rounded-md bg-muted p-2 text-sm">
                               <p className="text-xs uppercase text-muted-foreground">
-                                {message.direction === "inbound" ? "Cliente" : "Cris"} -{" "}
+                                {message.direction === "inbound" ? "Cliente" : leadSourceLabel(lead.source)} -{" "}
                                 {formatDateTime(message.createdAt)}
                               </p>
                               <p className="mt-1 whitespace-pre-wrap">{message.body}</p>

@@ -514,6 +514,9 @@ function shouldRetryWithDefaultConfig(error: unknown, config?: ReturnType<typeof
     return false;
   }
 
+  // Complete per-agent credentials must never fall back to another WhatsApp account.
+  if (/^[a-f0-9]{32}$/i.test(config.instanceId)) return false;
+
   if (!(error instanceof Error)) {
     return false;
   }

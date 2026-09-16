@@ -720,7 +720,7 @@ export function ConversationCenter() {
                   <p className="mt-1.5 truncate text-xs text-muted-foreground">{conversation.lastMessage?.body ?? "Sem mensagens ainda"}</p>
                   <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
                     <span className={`rounded-full px-2 py-1 ${conversation.botActive ? "bg-emerald-100 text-emerald-700" : "bg-orange-100 text-orange-700"}`}>
-                      {conversation.botActive ? "Cris ativa" : "Assumida"}
+                      {conversation.botActive ? `${conversation.agent?.name ?? "Cris"} ativa` : "Assumida"}
                     </span>
                     <span className="rounded-full bg-muted px-2 py-1">{conversation.state}</span>
                     {conversation.isStalled && conversation.stalledStageLabel ? (
@@ -910,7 +910,7 @@ export function ConversationCenter() {
 
                 <div className="mt-auto shrink-0 space-y-2 border-t bg-card px-3 py-3">
                   <div className="flex flex-wrap gap-1 text-[10px] text-muted-foreground">
-                    <span>{detail.botActive ? "Cris pode responder nesta conversa." : "Somente operador responde nesta conversa."}</span>
+                    <span>{detail.botActive ? `${detail.agent?.name ?? "Cris"} pode responder nesta conversa.` : "Somente operador responde nesta conversa."}</span>
                     <span className="hidden sm:inline">•</span>
                     <span className="hidden sm:inline">{currentUser?.role === "ADMIN" ? "Administradores visualizam todas as conversas." : "Você visualiza apenas as conversas atribuídas a você."}</span>
                   </div>
