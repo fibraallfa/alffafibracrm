@@ -13,6 +13,29 @@ const catalog = giovanaPlans.map((plan) => ({ ...plan, description: null }));
 const input = (state, message, memory = {}) => ({ phone: "5511000000000", state, message, memory, agent });
 const engine = () => new ChatbotEngineService({}, { async listActivePlans(id) { assert.equal(id, GIOVANA_AGENT_ID); return catalog; } }, {}, {});
 
+for (const message of ["Ok", "Está", "Está tudo correto!", "Sim, pode continuar", "Confirmo ✅"]) {
+  test(`summary confirmation completes with ${message} without relying on AI`, async () => {
+    let created = 0;
+    const service = new ChatbotEngineService({}, {
+      async createLeadFromChat(data) { created++; assert.equal(data.source, "chatbot:giovana"); return { id: "lead" }; },
+    }, {}, { async interpretFlowMessage() { throw new Error("Explicit confirmation should not need AI"); } });
+    const result = await service.nextResponse(input("CONFIRM_DATA", message, { name: "Ana Souza", planId: catalog[1].id }));
+    assert.equal(result.state, "FINISHED");
+    assert.equal(created, 1);
+  });
+}
+
+for (const message of ["Ok, mas o endereco esta errado", "Está correto?", "Nao confirmo", "Sim, mas quanto custa cancelar?"]) {
+  test(`qualified or ambiguous confirmation cannot create a lead: ${message}`, async () => {
+    const service = new ChatbotEngineService({}, {
+      async createLeadFromChat() { throw new Error("Must not create lead"); },
+      async listActivePlans() { return catalog; },
+    }, {}, { async interpretFlowMessage() { return { intent: "answer", value: message, question: null }; } });
+    const result = await service.nextResponse(input("CONFIRM_DATA", message));
+    assert.notEqual(result.state, "FINISHED");
+  });
+}
+
 function mockPrisma(t, delegate, method, implementation) {
   const original = delegate[method];
   delegate[method] = implementation;

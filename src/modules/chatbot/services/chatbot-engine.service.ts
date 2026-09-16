@@ -202,6 +202,9 @@ export class ChatbotEngineService {
     }
 
     const message = extractedValueForState(input.state, input.extractedData) ?? input.message.trim();
+    if (input.agent?.id === GIOVANA_AGENT_ID && input.state === "CONFIRM_DATA" && isDataConfirmation(message)) {
+      return this.runFlow({ ...input, message, memory });
+    }
     const interpretation = await this.openAiService.interpretFlowMessage({
       message, state: input.state,
       context: summarizeMemoryForAi(memory),
@@ -214,7 +217,8 @@ export class ChatbotEngineService {
       };
     }
 
-    if (interpretation.intent === "answer" && interpretation.value) {
+    if (interpretation.intent === "answer" && interpretation.value &&
+      !(input.agent?.id === GIOVANA_AGENT_ID && input.state === "CONFIRM_DATA" && interpretation.question)) {
       const next = await this.runFlow({ ...input, message: interpretation.value, extractedData: undefined, memory: { ...memory, salesPaused: false, followUpPaused: false, objectionCount: 0 } });
       if (interpretation.question) {
         const answer = await this.answerOutsideFlow({
@@ -736,7 +740,7 @@ export class ChatbotEngineService {
     }
 
     if (input.state === "CONFIRM_DATA") {
-      if (isPositive(text)) {
+      if (input.agent?.id === GIOVANA_AGENT_ID ? isDataConfirmation(text) : isPositive(text)) {
         const lead = await this.chatbotRepository.createLeadFromChat({
           name: memory.name ?? "Lead WhatsApp",
           phone: input.phone,
@@ -1985,6 +1989,12 @@ function isExplicitPlanCatalogQuestion(text: string) {
 function isAlternativeRequest(text: string) {
   const normalized = normalizeText(text);
   return ["outro", "outra", "outra opcao", "outra opção", "prefiro outro"].some((term) => normalized.includes(normalizeText(term)));
+}
+
+function isDataConfirmation(text: string) {
+  if (text.includes("?")) return false;
+  const normalized = normalizeText(text).replace(/[.!✅👍,]/gu, " ").replace(/\s+/g, " ").trim();
+  return /^(?:(?:sim|ok|okay|esta|ta|certo|correto|confirmo|confirmado|isso|isso mesmo|tudo certo|tudo correto|esta certo|esta correto|esta tudo certo|esta tudo correto|pode continuar|pode seguir|pode cadastrar|pode finalizar)(?:\s+|$))+$/.test(normalized);
 }
 
 function isPositive(text: string) {
