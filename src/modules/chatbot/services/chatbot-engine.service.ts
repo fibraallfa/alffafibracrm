@@ -202,12 +202,21 @@ export class ChatbotEngineService {
     }
 
     const message = extractedValueForState(input.state, input.extractedData) ?? input.message.trim();
-    // A standalone postal code is unambiguous; coverage still uses the existing lookup.
-    if (input.state === "ASK_CEP" && /^\d{5}-?\d{3}$/.test(message)) {
+    // Only whole, unambiguous field answers bypass AI; existing validators still run.
+    if (isStandaloneFlowAnswer(input.state, message)) {
       return this.runFlow({ ...input, message, memory: { ...memory, salesPaused: false, followUpPaused: false, objectionCount: 0 } });
     }
-    if (input.agent?.id === GIOVANA_AGENT_ID && input.state === "CONFIRM_DATA" && isDataConfirmation(message)) {
+    if (input.state === "CONFIRM_DATA" && isDataConfirmation(message)) {
       return this.runFlow({ ...input, message, memory });
+    }
+    if (["RECOMMEND_PLAN", "CHOOSE_PLAN"].includes(input.state)) {
+      const plans = await this.getPlans(input.agent);
+      const exactPlan = plans.find((plan) => normalizeText(message) === normalizeText(plan.name) || normalizeText(message) === normalizeText(plan.speed));
+      if (exactPlan) return this.selectPlanAndConfirm({ memory, plan: exactPlan });
+      if (input.state === "RECOMMEND_PLAN" && isDataConfirmation(message)) {
+        const recommended = plans.find((plan) => plan.id === memory.recommendedPlanId) ?? findRecommendedPlan(plans, input.agent?.rules);
+        if (recommended) return this.selectPlanAndConfirm({ memory, plan: recommended });
+      }
     }
     const interpretation = await this.openAiService.interpretFlowMessage({
       message, state: input.state,
@@ -222,7 +231,7 @@ export class ChatbotEngineService {
     }
 
     if (interpretation.intent === "answer" && interpretation.value &&
-      !(input.agent?.id === GIOVANA_AGENT_ID && input.state === "CONFIRM_DATA" && interpretation.question)) {
+      !(input.state === "CONFIRM_DATA" && interpretation.question)) {
       const next = await this.runFlow({ ...input, message: interpretation.value, extractedData: undefined, memory: { ...memory, salesPaused: false, followUpPaused: false, objectionCount: 0 } });
       if (interpretation.question) {
         const answer = await this.answerOutsideFlow({
@@ -744,7 +753,7 @@ export class ChatbotEngineService {
     }
 
     if (input.state === "CONFIRM_DATA") {
-      if (input.agent?.id === GIOVANA_AGENT_ID ? isDataConfirmation(text) : isPositive(text)) {
+      if (isDataConfirmation(text)) {
         const lead = await this.chatbotRepository.createLeadFromChat({
           name: memory.name ?? "Lead WhatsApp",
           phone: input.phone,
@@ -1993,6 +2002,19 @@ function isExplicitPlanCatalogQuestion(text: string) {
 function isAlternativeRequest(text: string) {
   const normalized = normalizeText(text);
   return ["outro", "outra", "outra opcao", "outra opção", "prefiro outro"].some((term) => normalized.includes(normalizeText(term)));
+}
+
+function isStandaloneFlowAnswer(state: string, text: string) {
+  switch (state) {
+    case "ASK_CEP": return /^\d{5}-?\d{3}$/.test(text);
+    case "ASK_DOCUMENT": return /^(?:\d{11}|\d{14}|\d{3}\.\d{3}\.\d{3}-\d{2}|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})$/.test(text);
+    case "ASK_BIRTH_DATE": return /^(?:\d{8}|\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})$/.test(text);
+    case "ASK_STREET_NUMBER": return /^\d{1,6}$/.test(text);
+    case "ASK_BILLING_DUE_DAY": return /^\d{1,2}$/.test(text);
+    case "ASK_EMAIL": return /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(text);
+    case "ASK_COMPLEMENT": return /^(?:nao|não|sem complemento|nenhum|nao tem|não tem|(?:apto|apartamento|bloco|casa|fundos|andar)\s*\d{0,5})$/i.test(text);
+    default: return false;
+  }
 }
 
 function isDataConfirmation(text: string) {

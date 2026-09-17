@@ -53,7 +53,13 @@ export class OpenAiService {
         } },
       });
       return validateFlowInterpretation(JSON.parse(response.output_text), input.message);
-    } catch {
+    } catch (error) {
+      // Log only diagnostic codes, never credentials, prompts or customer data.
+      console.error("flow_interpretation_failed", {
+        state: input.state,
+        status: error instanceof OpenAI.APIError ? error.status : undefined,
+        code: error instanceof OpenAI.APIError ? error.code : "interpretation_error",
+      });
       // An unavailable interpreter must never silently approve customer data.
       return null;
     }
