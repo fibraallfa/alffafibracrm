@@ -213,7 +213,7 @@ export class ChatbotEngineService {
       const plans = await this.getPlans(input.agent);
       const exactPlan = plans.find((plan) => normalizeText(message) === normalizeText(plan.name) || normalizeText(message) === normalizeText(plan.speed));
       if (exactPlan) return this.selectPlanAndConfirm({ memory, plan: exactPlan });
-      if (input.state === "RECOMMEND_PLAN" && isDataConfirmation(message)) {
+      if (input.state === "RECOMMEND_PLAN" && (isDataConfirmation(message) || acceptsRecommendedPlan(message))) {
         const recommended = plans.find((plan) => plan.id === memory.recommendedPlanId) ?? findRecommendedPlan(plans, input.agent?.rules);
         if (recommended) return this.selectPlanAndConfirm({ memory, plan: recommended });
       }
@@ -2002,6 +2002,12 @@ function isExplicitPlanCatalogQuestion(text: string) {
 function isAlternativeRequest(text: string) {
   const normalized = normalizeText(text);
   return ["outro", "outra", "outra opcao", "outra opção", "prefiro outro"].some((term) => normalized.includes(normalizeText(term)));
+}
+
+function acceptsRecommendedPlan(text: string) {
+  if (text.includes("?")) return false;
+  const normalized = normalizeText(text).replace(/[!.,✅👍]/gu, " ").replace(/\s+/g, " ").trim();
+  return /^(?:sim\s+)?(?:(?:eu\s+)?(?:quero|aceito|prefiro|escolho|vou querer)(?:\s+(?:contratar|seguir com|ficar com))?|(?:pode|vamos)\s+(?:seguir|continuar|fechar)\s+com)\s+(?:(?:essa|esta|a)\s+opcao|(?:esse|este|o)\s+plano(?:\s+recomendado)?|o\s+recomendado)(?:\s+(?:mesmo|mesma|por favor))?$/.test(normalized);
 }
 
 function isStandaloneFlowAnswer(state: string, text: string) {

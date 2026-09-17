@@ -6,6 +6,23 @@ import { GIOVANA_AGENT_ID, giovanaPlans, GIOVANA_RECOMMENDED_PLAN_ID } from '../
 for (const name of ['Cris', 'Giovana']) {
   const plans = name === 'Giovana' ? giovanaPlans : [{ id: 'cris-plan', name: 'Plano 500Mb (Wi-Fi) + 60Gb (Celular)', speed: '500Mb', price: 129.9 }];
   const agent = { name, id: name === 'Giovana' ? GIOVANA_AGENT_ID : 'cris', rules: name === 'Giovana' ? { recommendedPlanId: GIOVANA_RECOMMENDED_PLAN_ID } : {}, flow: {} };
+  for (const message of ['quero essa opção', 'Quero esse plano!', 'sim, quero essa opção', 'vou querer esse plano', 'pode seguir com esse plano', 'quero o recomendado']) {
+    test(`${name}: accepts contextual recommendation: ${message}`, async () => {
+      const service = new ChatbotEngineService({}, { async listActivePlans() { return plans; } }, {}, {});
+      const recommendedPlanId = name === 'Giovana' ? GIOVANA_RECOMMENDED_PLAN_ID : plans[0].id;
+      const result = await service.nextResponse({ state: 'RECOMMEND_PLAN', message, agent, phone: '5511000000000', memory: { recommendedPlanId } });
+      assert.equal(result.state, 'CONFIRM_DATA');
+      assert.equal(result.memory.planId, recommendedPlanId);
+    });
+  }
+  for (const [state, message] of [['RECOMMEND_PLAN', 'não quero essa opção'], ['RECOMMEND_PLAN', 'quero essa opção, mas tem fidelidade?'], ['RECOMMEND_PLAN', 'quero outra opção'], ['CHOOSE_PLAN', 'quero essa opção']]) {
+    test(`${name}: does not infer an ambiguous plan: ${state} ${message}`, async () => {
+      const service = new ChatbotEngineService({}, { async listActivePlans() { return plans; } }, {}, { async interpretFlowMessage() { return null; } });
+      const result = await service.nextResponse({ state, message, agent, phone: '5511000000000', memory: {} });
+      assert.equal(result.state, state);
+      assert.equal(result.memory.planId, undefined);
+    });
+  }
   test(`${name}: complete flow preserves data through every stage`, async () => {
     let saved;
     const service = new ChatbotEngineService({}, {
