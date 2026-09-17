@@ -18,6 +18,30 @@ function setup(interpretation) {
 }
 const input = (state, message, memory = {}) => ({ phone: '5511999999999', state, message, memory, agent: null });
 
+for (const message of ['28943412', '28943-412']) {
+  test(`standalone CEP ${message} reaches coverage even when AI is unavailable`, async () => {
+    const engine = new ChatbotEngineService({}, {}, {}, {
+      async interpretFlowMessage() { throw new Error('Standalone CEP must not require AI'); },
+    });
+    let lookup;
+    engine.handleCepStep = async (value) => { lookup = value; return { state: 'ASK_NAME', memory: { ...value.memory, cep: value.cep }, reply: 'Qual é o seu nome completo?' }; };
+    const result = await engine.nextResponse(input('ASK_CEP', message, { salesPaused: true, followUpPaused: true }));
+    assert.equal(lookup.cep, '28943412');
+    assert.equal(result.state, 'ASK_NAME');
+    assert.equal(result.memory.salesPaused, false);
+  });
+}
+
+for (const message of ['Tem cobertura no CEP 28943412?', '2894341', '289434123', 'Não use 28943412']) {
+  test(`ambiguous or incomplete CEP still requires interpretation: ${message}`, async () => {
+    const { engine, calls } = setup(null);
+    const result = await engine.nextResponse(input('ASK_CEP', message));
+    assert.equal(result.state, 'ASK_CEP');
+    assert.equal(result.memory.cep, undefined);
+    assert.equal(calls.length, 1);
+  });
+}
+
 for (const state of states) {
   test(`question never advances or writes customer fields in ${state}`, async () => {
     const { engine } = setup({ intent: 'question', value: null, question: null });

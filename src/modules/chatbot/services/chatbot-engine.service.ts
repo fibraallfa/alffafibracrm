@@ -202,6 +202,10 @@ export class ChatbotEngineService {
     }
 
     const message = extractedValueForState(input.state, input.extractedData) ?? input.message.trim();
+    // A standalone postal code is unambiguous; coverage still uses the existing lookup.
+    if (input.state === "ASK_CEP" && /^\d{5}-?\d{3}$/.test(message)) {
+      return this.runFlow({ ...input, message, memory: { ...memory, salesPaused: false, followUpPaused: false, objectionCount: 0 } });
+    }
     if (input.agent?.id === GIOVANA_AGENT_ID && input.state === "CONFIRM_DATA" && isDataConfirmation(message)) {
       return this.runFlow({ ...input, message, memory });
     }

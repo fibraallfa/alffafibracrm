@@ -13,6 +13,17 @@ const catalog = giovanaPlans.map((plan) => ({ ...plan, description: null }));
 const input = (state, message, memory = {}) => ({ phone: "5511000000000", state, message, memory, agent });
 const engine = () => new ChatbotEngineService({}, { async listActivePlans(id) { assert.equal(id, GIOVANA_AGENT_ID); return catalog; } }, {}, {});
 
+test("Giovana standalone CEP reaches coverage without AI and preserves agent", async () => {
+  const service = engine();
+  service.handleCepStep = async ({ cep, memory }) => {
+    assert.equal(cep, "28943412");
+    return { state: "FINISHED_UNAVAILABLE", memory: { ...memory, cep }, reply: "Sem cobertura" };
+  };
+  const result = await service.nextResponse(input("ASK_CEP", "28943412", { name: "Ana Souza" }));
+  assert.equal(result.state, "FINISHED_UNAVAILABLE");
+  assert.equal(result.memory.name, "Ana Souza");
+});
+
 for (const message of ["Ok", "Está", "Está tudo correto!", "Sim, pode continuar", "Confirmo ✅"]) {
   test(`summary confirmation completes with ${message} without relying on AI`, async () => {
     let created = 0;
