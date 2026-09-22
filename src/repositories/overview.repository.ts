@@ -1,5 +1,6 @@
 import { ExpenseStatus, LeadStatus, Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { leadSourceWhere } from "@/lib/lead-source-access";
 
 export type OverviewFilters = {
   from: Date;
@@ -407,7 +408,7 @@ function applyToBucket(
 
 function buildLeadAccessWhere(user?: Pick<User, "id" | "role">): Prisma.LeadWhereInput {
   if (user?.role === "EMPLOYEE") {
-    return { assignedUserId: user.id };
+    return { assignedUserId: user.id, ...leadSourceWhere(user) };
   }
   return {};
 }
@@ -415,6 +416,7 @@ function buildLeadAccessWhere(user?: Pick<User, "id" | "role">): Prisma.LeadWher
 function buildWonLeadAccessWhere(user?: Pick<User, "id" | "role">): Prisma.LeadWhereInput {
   if (user?.role === "EMPLOYEE") {
     return {
+      ...leadSourceWhere(user),
       OR: [
         { assignedUserId: user.id },
         { closedByUserId: user.id },

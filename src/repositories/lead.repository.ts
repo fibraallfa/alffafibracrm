@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
+import { leadSourceWhere, type LeadAccessUser } from "@/lib/lead-source-access";
 import type { Prisma, User } from "@prisma/client";
 import type { CreateLeadInput, UpdateLeadInput } from "@/modules/leads/types/lead";
 
 export class LeadRepository {
-  async findMany(user?: Pick<User, "id" | "role">) {
+  async findMany(user?: LeadAccessUser) {
     return prisma.lead.findMany({
       where: buildLeadAccessWhere(user),
       orderBy: { createdAt: "desc" },
@@ -11,7 +12,7 @@ export class LeadRepository {
     });
   }
 
-  async findById(id: string, user?: Pick<User, "id" | "role">) {
+  async findById(id: string, user?: LeadAccessUser) {
     return prisma.lead.findFirst({
       where: { id, ...buildLeadAccessWhere(user) },
       include: {
@@ -139,9 +140,10 @@ export class LeadRepository {
   }
 }
 
-function buildLeadAccessWhere(user?: Pick<User, "id" | "role">) {
+function buildLeadAccessWhere(user?: LeadAccessUser) {
   return {
     deletedAt: null,
+    ...leadSourceWhere(user),
     ...(user?.role === "EMPLOYEE" ? { assignedUserId: user.id } : {}),
   };
 }

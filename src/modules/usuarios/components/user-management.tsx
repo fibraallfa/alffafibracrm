@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { permissions } from "@/constants/permissions";
 import { useApiResource } from "@/hooks/use-api-resource";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { getLeadAgentScope } from "@/lib/lead-source-access";
 
 type UserItem = {
   id: string;
@@ -447,6 +448,20 @@ function UserModal({ user, saving, onClose, onSave }: { user: UserItem | null; s
         ) : (
           <fieldset>
             <legend className="mb-3 text-sm font-semibold">Abas e permissões do cadastro</legend>
+            <fieldset className="mb-4 rounded-md border border-blue-200 bg-blue-50/50 p-4">
+              <legend className="px-1 text-sm font-semibold">Leads permitidos por chatbot</legend>
+              <div className="flex flex-wrap gap-4">
+                {([['cris', 'Cris'], ['giovana', 'Giovana'], ['both', 'Ambos']] as const).map(([value, label]) => (
+                  <label key={value} className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input type="radio" name="leadAgentScope" value={value}
+                      checked={getLeadAgentScope(selected) === value}
+                      onChange={() => setSelected((current) => ({ ...current, 'leads.onlyCris': value === 'cris', 'leads.onlyGiovana': value === 'giovana' }))} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">Aplica-se aos leads atribuídos a este funcionário. Ambos mantém também os cadastros manuais atribuídos.</p>
+            </fieldset>
             <div className="grid gap-3 md:grid-cols-2">
               {permissionGroups.map((group) => {
                 const all = group.items.every(([key]) => selected[key]);

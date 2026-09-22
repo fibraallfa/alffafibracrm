@@ -1,5 +1,6 @@
 import { LeadStatus, Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { leadSourceWhere } from "@/lib/lead-source-access";
 
 export type DashboardFilters = {
   from?: Date;
@@ -96,7 +97,7 @@ function buildDashboardAccessWhere(user?: Pick<User, "id" | "role">): Prisma.Lea
     return {};
   }
 
-  return { assignedUserId: user.id };
+  return { assignedUserId: user.id, ...leadSourceWhere(user) };
 }
 
 function buildWonAccessWhere(user?: Pick<User, "id" | "role">): Prisma.LeadWhereInput {
@@ -105,6 +106,7 @@ function buildWonAccessWhere(user?: Pick<User, "id" | "role">): Prisma.LeadWhere
   }
 
   return {
+    ...leadSourceWhere(user),
     OR: [
       { closedByUserId: user.id },
       { closedByUserId: null, assignedUserId: user.id },

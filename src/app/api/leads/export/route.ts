@@ -8,6 +8,7 @@ import { assertPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { permissions } from "@/constants/permissions";
 import { leadSourceLabel } from "@/modules/leads/types/lead-source";
+import { leadSourceWhere } from "@/lib/lead-source-access";
 
 export async function GET() {
   try {
@@ -15,7 +16,7 @@ export async function GET() {
     assertPermission(user, permissions.leadsExport);
 
     const leads = await prisma.lead.findMany({
-      where: { deletedAt: null, ...(user.role === "EMPLOYEE" ? { assignedUserId: user.id } : {}) },
+      where: { deletedAt: null, ...leadSourceWhere(user), ...(user.role === "EMPLOYEE" ? { assignedUserId: user.id } : {}) },
       include: { assignedUser: true, plan: true, kanbanStage: true },
       orderBy: { createdAt: "desc" },
     });
