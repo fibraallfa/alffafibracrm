@@ -192,6 +192,17 @@ export class ChatbotEngineService {
     history?: Array<{ role: string; text: string }>;
   }): Promise<NextBotResponse> {
     const memory = { ...input.memory, recentHistory: input.history ?? input.memory.recentHistory ?? [] };
+    if (usesLinkedCatalog(input.agent) && ["RECOMMEND_PLAN", "CHOOSE_PLAN", "CONFIRM_DATA", "CORRECTION"].includes(input.state)) {
+      const plans = await this.getPlans(input.agent);
+      const staleSelection = memory.planId && !plans.some((plan) => plan.id === memory.planId);
+      if (memory.recommendedPlanId && !plans.some((plan) => plan.id === memory.recommendedPlanId)) delete memory.recommendedPlanId;
+      if (staleSelection) {
+        delete memory.planId;
+        delete memory.planName;
+        delete memory.planValue;
+        return { state: "CHOOSE_PLAN", memory, reply: `Nossas ofertas foram atualizadas. Escolha uma das opções disponíveis para continuarmos:\n\n${formatPlanList(plans)}` };
+      }
+    }
     if (isExplicitStopRequest(input.message)) return this.pauseSales(input.state, memory);
     if (memory.salesPaused && /^(oi|ola|bom dia|boa tarde|boa noite|voltei|quero continuar|quero retomar|vamos continuar|tenho interesse)[!.?\s]*$/i.test(normalizeText(input.message))) {
       return { state: input.state, memory: { ...clearFollowUpState(memory), salesPaused: false, followUpPaused: false, objectionCount: 0 }, reply: `Que bom ter você de volta! Continuamos de onde paramos. 😊\n\n${promptForState(input.state, getFirstName(memory.name))}` };
@@ -857,6 +868,7 @@ export class ChatbotEngineService {
     if (!agent) return this.chatbotRepository.listActivePlans();
     if (agent.id === GIOVANA_AGENT_ID) {
       const plans = await this.chatbotRepository.listActivePlans(agent.id);
+      if (usesLinkedCatalog(agent)) return plans;
       return plans.filter((plan) => giovanaPlans.some((allowed) =>
         allowed.id === plan.id && allowed.name === plan.name && allowed.price === Number(plan.price)));
     }
@@ -2002,6 +2014,11 @@ function isExplicitPlanCatalogQuestion(text: string) {
 function isAlternativeRequest(text: string) {
   const normalized = normalizeText(text);
   return ["outro", "outra", "outra opcao", "outra opção", "prefiro outro"].some((term) => normalized.includes(normalizeText(term)));
+}
+
+function usesLinkedCatalog(agent: { id: string; rules: unknown } | null | undefined) {
+  return agent?.id === GIOVANA_AGENT_ID && !!agent.rules && typeof agent.rules === "object" &&
+    "catalogMode" in agent.rules && agent.rules.catalogMode === "linked";
 }
 
 function acceptsRecommendedPlan(text: string) {

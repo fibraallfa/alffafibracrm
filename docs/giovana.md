@@ -1,5 +1,13 @@
 # Giovana
 
+Atualizacao de catalogo: `scripts/align-giovana-plans.mjs` vincula a Giovana aos
+planos ativos do Cris e remove a recomendacao antiga. Execute apenas apos publicar
+o suporte a `catalogMode=linked`. O script verifica que o cadastro do Cris ficou
+identico. Planos antigos permanecem no banco para preservar leads historicos,
+mas ficam desvinculados da Giovana. Conversas pendentes com plano antigo voltam
+a escolha de plano, mantendo os dados pessoais. O catalogo abaixo documenta a
+configuracao inicial, anterior a esta atualizacao.
+
 Giovana utiliza o mesmo motor de fluxo do Cris, com cadastro de agente, instancia,
 conversas e catalogo separados. Nenhuma migracao do banco e necessaria.
 

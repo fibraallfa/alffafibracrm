@@ -13,6 +13,20 @@ const catalog = giovanaPlans.map((plan) => ({ ...plan, description: null }));
 const input = (state, message, memory = {}) => ({ phone: "5511000000000", state, message, memory, agent });
 const engine = () => new ChatbotEngineService({}, { async listActivePlans(id) { assert.equal(id, GIOVANA_AGENT_ID); return catalog; } }, {}, {});
 
+test("linked catalog uses Cris plans and recommendation without old offer", async () => {
+  const plans = [{ id: 'cris-combo', name: 'Plano 500Mb (Wi-Fi) + 60Gb (Celular)', speed: '500Mb', price: 129.9 }];
+  const service = new ChatbotEngineService({}, { async listActivePlans() { return plans; } }, {}, {});
+  const linked = { ...agent, rules: { catalogMode: 'linked' } };
+  assert.deepEqual(await service.getPlans(linked), plans);
+  const result = await service.nextResponse({ ...input('ASK_EMAIL', 'ana@example.com'), agent: linked });
+  assert.equal(result.memory.recommendedPlanId, 'cris-combo');
+  assert.doesNotMatch(result.reply, /69,90/);
+  const stale = await service.nextResponse({ ...input('CONFIRM_DATA', 'sim', { name: 'Ana Souza', planId: catalog[1].id, planName: catalog[1].name, planValue: 69.9 }), agent: linked });
+  assert.equal(stale.state, 'CHOOSE_PLAN');
+  assert.equal(stale.memory.planId, undefined);
+  assert.equal(stale.memory.name, 'Ana Souza');
+});
+
 test("Giovana standalone CEP reaches coverage without AI and preserves agent", async () => {
   const service = engine();
   service.handleCepStep = async ({ cep, memory }) => {
