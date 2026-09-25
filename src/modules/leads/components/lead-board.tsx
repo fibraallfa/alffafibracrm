@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useApiResource } from "@/hooks/use-api-resource";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import type { ApiResult } from "@/types/api";
 
 const statusOptions = [
@@ -104,6 +105,7 @@ type LeadDetail = LeadListItem & {
 };
 
 type ViewMode = "kanban" | "table";
+type AgentScope = "both" | "cris" | "giovana";
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -114,7 +116,9 @@ const LEADS_PER_PAGE = 25;
 
 export function LeadBoard() {
   const searchParams = useSearchParams();
-  const { data, loading, error, refresh } = useApiResource<LeadListItem[]>("/api/leads");
+  const { data: currentUser } = useCurrentUser();
+  const [agentScope, setAgentScope] = useState<AgentScope>("both");
+  const { data, loading, error, refresh } = useApiResource<LeadListItem[]>(`/api/leads?agent=${agentScope}`);
   const users = useApiResource<UserOption[]>("/api/users");
   const plans = useApiResource<PlanOption[]>("/api/plans");
   const stages = useApiResource<LeadStage[]>("/api/lead-stages");
@@ -181,7 +185,7 @@ export function LeadBoard() {
 
   useEffect(() => {
     setPage(1);
-  }, [query, statusFilter, searchParams, viewMode]);
+  }, [agentScope, query, statusFilter, searchParams, viewMode]);
 
   useEffect(() => {
     if (page > totalPages) {
@@ -336,6 +340,13 @@ export function LeadBoard() {
               </option>
             ))}
           </select>
+          {currentUser?.role === "ADMIN" && !currentUser.permissions["leads.onlyGiovana"] && !currentUser.permissions["leads.onlyCris"] ? (
+            <select aria-label="Chatbot exibido" className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={agentScope} onChange={(event) => setAgentScope(event.target.value as AgentScope)}>
+              <option value="both">Cris e Giovana</option>
+              <option value="cris">Somente Cris</option>
+              <option value="giovana">Somente Giovana</option>
+            </select>
+          ) : null}
           <div className="flex rounded-md border bg-background p-1">
             <Button
               aria-label="Visualizar kanban"
@@ -361,7 +372,7 @@ export function LeadBoard() {
             Atualizar
           </Button>
           <Button asChild variant="outline" type="button">
-            <a href="/api/leads/export">
+            <a href={`/api/leads/export?agent=${agentScope}`}>
               <Download className="h-4 w-4" aria-hidden="true" />
               Exportar XLSX
             </a>

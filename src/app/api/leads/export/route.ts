@@ -10,13 +10,14 @@ import { permissions } from "@/constants/permissions";
 import { leadSourceLabel } from "@/modules/leads/types/lead-source";
 import { leadSourceWhere } from "@/lib/lead-source-access";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const user = await requireCurrentUser();
     assertPermission(user, permissions.leadsExport);
 
+    const agentScope = new URL(request.url).searchParams.get("agent");
     const leads = await prisma.lead.findMany({
-      where: { deletedAt: null, ...leadSourceWhere(user), ...(user.role === "EMPLOYEE" ? { assignedUserId: user.id } : {}) },
+      where: { deletedAt: null, ...leadSourceWhere(user, agentScope ?? undefined), ...(user.role === "EMPLOYEE" ? { assignedUserId: user.id } : {}) },
       include: { assignedUser: true, plan: true, kanbanStage: true },
       orderBy: { createdAt: "desc" },
     });

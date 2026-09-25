@@ -263,15 +263,15 @@ export class ChatbotRepository {
     });
   }
 
-  async countConversations(user?: LeadAccessUser) {
+  async countConversations(user?: LeadAccessUser, agentScope?: string) {
     return prisma.chatConversation.count({
-      where: buildConversationAccessWhere(user),
+      where: buildConversationAccessWhere(user, agentScope),
     });
   }
 
-  async listConversations(params?: { skip?: number; take?: number; ids?: string[]; user?: LeadAccessUser }) {
+  async listConversations(params?: { skip?: number; take?: number; ids?: string[]; user?: LeadAccessUser; agentScope?: string }) {
     return prisma.chatConversation.findMany({
-      where: { ...buildConversationAccessWhere(params?.user), ...(params?.ids ? { id: { in: params.ids } } : {}) },
+      where: { ...buildConversationAccessWhere(params?.user, params?.agentScope), ...(params?.ids ? { id: { in: params.ids } } : {}) },
       select: {
         id: true,
         phone: true,
@@ -315,9 +315,9 @@ export class ChatbotRepository {
     });
   }
 
-  async listConversationSummaries(user?: LeadAccessUser) {
+  async listConversationSummaries(user?: LeadAccessUser, agentScope?: string) {
     return prisma.chatConversation.findMany({
-      where: buildConversationAccessWhere(user),
+      where: buildConversationAccessWhere(user, agentScope),
       select: {
         id: true,
         state: true,
@@ -469,8 +469,8 @@ export class ChatbotRepository {
   }
 }
 
-function buildConversationAccessWhere(user?: LeadAccessUser): Prisma.ChatConversationWhereInput {
-  const agentWhere = conversationAgentWhere(user);
+function buildConversationAccessWhere(user?: LeadAccessUser, agentScope?: string): Prisma.ChatConversationWhereInput {
+  const agentWhere = conversationAgentWhere(user, agentScope);
   if (Object.keys(agentWhere).length > 0) {
     return { deletedAt: null, ...agentWhere };
   }

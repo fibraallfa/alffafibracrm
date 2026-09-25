@@ -81,6 +81,7 @@ type ConversationPayload = {
 };
 
 type ConversationFilter = "all" | "unavailable" | "finished" | "stalled";
+type AgentScope = "both" | "cris" | "giovana";
 
 const TAG_SUGGESTIONS = ["Novo lead", "Prioridade", "Retorno", "Instalação", "Venda", "Sem viabilidade"];
 const PAGE_SIZE = 20;
@@ -118,6 +119,7 @@ export function ConversationCenter() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [activeFilter, setActiveFilter] = useState<ConversationFilter>("all");
+  const [agentScope, setAgentScope] = useState<AgentScope>("both");
   const [isFilterPopupOpen, setIsFilterPopupOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -148,7 +150,7 @@ export function ConversationCenter() {
     const controller = new AbortController();
     summaryRequestRef.current = controller;
     try {
-      const response = await fetch("/api/conversations?summaryOnly=1", { cache: "no-store", signal: controller.signal });
+      const response = await fetch(`/api/conversations?summaryOnly=1&agent=${agentScope}`, { cache: "no-store", signal: controller.signal });
       const result = await response.json();
       if (result.status === "success" && !controller.signal.aborted) {
         setSummary(result.data);
@@ -186,7 +188,7 @@ export function ConversationCenter() {
     }
 
     try {
-    const response = await fetch(`/api/conversations?offset=${offset}&limit=${limit}&filter=${filter}&includeSummary=0`, { cache: "no-store", signal: controller.signal });
+    const response = await fetch(`/api/conversations?offset=${offset}&limit=${limit}&filter=${filter}&agent=${agentScope}&includeSummary=0`, { cache: "no-store", signal: controller.signal });
     const result = await response.json();
     if (result.status !== "success") {
       setStatusMessage(result.message ?? "Não foi possível carregar as conversas.");
@@ -370,7 +372,7 @@ export function ConversationCenter() {
       summaryTimerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeFilter]);
+  }, [activeFilter, agentScope]);
 
   useEffect(() => {
     return () => {
@@ -621,6 +623,13 @@ export function ConversationCenter() {
             <CardDescription className="hidden sm:block">Atendimento WhatsApp · Allfa Fibra</CardDescription>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {currentUser?.role === "ADMIN" && !currentUser.permissions["leads.onlyGiovana"] && !currentUser.permissions["leads.onlyCris"] ? (
+              <select aria-label="Chatbot exibido" className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700" value={agentScope} onChange={(event) => setAgentScope(event.target.value as AgentScope)}>
+                <option value="both">Cris e Giovana</option>
+                <option value="cris">Somente Cris</option>
+                <option value="giovana">Somente Giovana</option>
+              </select>
+            ) : null}
             <span className={`h-2.5 w-2.5 rounded-full ${isRealtimeConnected ? "bg-emerald-500" : "bg-orange-500"}`} />
             {currentUser?.id === "visual-preview" ? "Prévia local" : isRealtimeConnected ? "Conectado" : "Reconectando..."}
             <Button type="button" size="sm" className="shrink-0 whitespace-nowrap" onClick={() => setIsCreateOpen(true)}>

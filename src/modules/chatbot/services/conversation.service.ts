@@ -30,6 +30,7 @@ export class ConversationService {
     offset?: number;
     limit?: number;
     user?: LeadAccessUser;
+    agentScope?: string;
     filter?: "all" | "unavailable" | "finished" | "stalled";
     includeSummary?: boolean;
   }) {
@@ -39,7 +40,7 @@ export class ConversationService {
     const shouldFilterManually = filter !== "all";
     // First-page requests do not need to scan the entire inbox for badge counts.
     const summaryRows = shouldFilterManually || params?.includeSummary !== false
-      ? await this.getSummaryRows(params?.user)
+      ? await this.getSummaryRows(params?.user, params?.agentScope)
       : null;
     const summary = summaryRows ? buildConversationSummary(summaryRows) : undefined;
     const matchingRows = shouldFilterManually ? summaryRows!.filter((row) => matchesConversationFilter({
@@ -51,10 +52,11 @@ export class ConversationService {
         take: limit,
         ...(matchingRows ? { ids: matchingRows.slice(offset, offset + limit).map((row) => row.id) } : {}),
         user: params?.user,
+        agentScope: params?.agentScope,
       }),
       matchingRows ? Promise.resolve(matchingRows.length)
         : summaryRows ? Promise.resolve(summaryRows.length)
-        : this.chatbotRepository.countConversations(params?.user),
+        : this.chatbotRepository.countConversations(params?.user, params?.agentScope),
     ]);
 
     const allItems = conversations.map((conversation) => {
@@ -112,8 +114,8 @@ export class ConversationService {
     };
   }
 
-  private async getSummaryRows(user?: LeadAccessUser) {
-    const rows = await this.chatbotRepository.listConversationSummaries(user);
+  private async getSummaryRows(user?: LeadAccessUser, agentScope?: string) {
+    const rows = await this.chatbotRepository.listConversationSummaries(user, agentScope);
     return rows.map((row) => ({
       id: row.id, state: row.state, memory: {},
       ownerUserId: row.ownerUserId, updatedAt: row.updatedAt.toISOString(),
@@ -121,8 +123,8 @@ export class ConversationService {
     }));
   }
 
-  async getSummary(user: LeadAccessUser) {
-    return buildConversationSummary(await this.getSummaryRows(user));
+  async getSummary(user: LeadAccessUser, agentScope?: string) {
+    return buildConversationSummary(await this.getSummaryRows(user, agentScope));
   }
 
   async getDetail(
