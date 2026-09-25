@@ -1,7 +1,8 @@
-import type { Prisma, User } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { ChatbotRepository } from "@/repositories/chatbot.repository";
 import { writeTechnicalLog } from "@/lib/logger";
 import { ZapiService } from "@/services/zapi/zapi.service";
+import type { LeadAccessUser } from "@/lib/lead-source-access";
 
 type ConversationMemory = {
   tags?: ConversationTag[];
@@ -28,7 +29,7 @@ export class ConversationService {
   async list(params?: {
     offset?: number;
     limit?: number;
-    user?: Pick<User, "id" | "role">;
+    user?: LeadAccessUser;
     filter?: "all" | "unavailable" | "finished" | "stalled";
     includeSummary?: boolean;
   }) {
@@ -111,7 +112,7 @@ export class ConversationService {
     };
   }
 
-  private async getSummaryRows(user?: Pick<User, "id" | "role">) {
+  private async getSummaryRows(user?: LeadAccessUser) {
     const rows = await this.chatbotRepository.listConversationSummaries(user);
     return rows.map((row) => ({
       id: row.id, state: row.state, memory: {},
@@ -120,13 +121,13 @@ export class ConversationService {
     }));
   }
 
-  async getSummary(user: Pick<User, "id" | "role">) {
+  async getSummary(user: LeadAccessUser) {
     return buildConversationSummary(await this.getSummaryRows(user));
   }
 
   async getDetail(
     conversationId: string,
-    user?: Pick<User, "id" | "role">,
+    user?: LeadAccessUser,
     params?: { offset?: number; limit?: number },
   ) {
     const offset = params?.offset ?? 0;
@@ -182,7 +183,7 @@ export class ConversationService {
     return this.chatbotRepository.listAssignableUsers();
   }
 
-  async assignOwner(conversationId: string, ownerUserId: string | null, user?: Pick<User, "id" | "role">) {
+  async assignOwner(conversationId: string, ownerUserId: string | null, user?: LeadAccessUser) {
     const detail = await this.getDetail(conversationId, user);
     if (!detail) {
       throw new Error("Conversa não encontrada.");
@@ -192,7 +193,7 @@ export class ConversationService {
     return this.getDetail(conversationId, user);
   }
 
-  async toggleBotControl(conversationId: string, ownerUserId: string | null, user?: Pick<User, "id" | "role">) {
+  async toggleBotControl(conversationId: string, ownerUserId: string | null, user?: LeadAccessUser) {
     const detail = await this.getDetail(conversationId, user);
     if (!detail) {
       throw new Error("Conversa não encontrada.");
@@ -202,7 +203,7 @@ export class ConversationService {
     return this.getDetail(conversationId, user);
   }
 
-  async updateTags(conversationId: string, tags: ConversationTag[], user?: Pick<User, "id" | "role">) {
+  async updateTags(conversationId: string, tags: ConversationTag[], user?: LeadAccessUser) {
     const detail = await this.getDetail(conversationId, user);
     if (!detail) {
       throw new Error("Conversa não encontrada.");
@@ -217,7 +218,7 @@ export class ConversationService {
     return this.getDetail(conversationId, user);
   }
 
-  async sendManualMessage(params: { conversationId: string; content: string; user?: Pick<User, "id" | "role"> }) {
+  async sendManualMessage(params: { conversationId: string; content: string; user?: LeadAccessUser }) {
     const conversation = await this.chatbotRepository.getConversationById(params.conversationId, params.user);
     if (!conversation) {
       throw new Error("Conversa não encontrada.");
@@ -251,7 +252,7 @@ export class ConversationService {
     mimeType: string;
     dataUrl: string;
     caption?: string;
-    user?: Pick<User, "id" | "role">;
+    user?: LeadAccessUser;
   }) {
     const conversation = await this.chatbotRepository.getConversationById(params.conversationId, params.user);
     if (!conversation) {
@@ -336,7 +337,7 @@ export class ConversationService {
     return this.getDetail(conversation.id);
   }
 
-  async deleteConversation(conversationId: string, user?: Pick<User, "id" | "role">) {
+  async deleteConversation(conversationId: string, user?: LeadAccessUser) {
     const detail = await this.getDetail(conversationId, user);
     if (!detail) {
       throw new Error("Conversa não encontrada.");

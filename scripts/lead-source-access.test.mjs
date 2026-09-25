@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { leadSourceWhere, getLeadAgentScope } from '../src/lib/lead-source-access.ts';
+import { conversationAgentWhere, leadSourceWhere, getLeadAgentScope } from '../src/lib/lead-source-access.ts';
 import { LeadRepository } from '../src/repositories/lead.repository.ts';
 import { prisma } from '../src/lib/prisma.ts';
 
@@ -20,8 +20,9 @@ for (const [flags, expected] of [[{}, {}], [{'leads.onlyCris': true}, {source:{i
     assert.deepEqual(queries[1],{id:'lead',deletedAt:null,...expected,assignedUserId:'employee'});
   });
 }
-test('admin ignores chatbot restriction and existing users default to both',()=>{
-  assert.deepEqual(leadSourceWhere({id:'admin',role:'ADMIN',permissions:{'leads.onlyGiovana':true}}),{});
+test('explicit chatbot restriction also applies to administrators',()=>{
+  assert.deepEqual(leadSourceWhere({id:'admin',role:'ADMIN',permissions:{'leads.onlyGiovana':true}}),{source:'chatbot:giovana'});
+  assert.equal(conversationAgentWhere({id:'admin',role:'ADMIN',permissions:{'leads.onlyGiovana':true}}).agentId, 'a8b1e073-d32a-4c11-8b8b-0b15b829aec1');
   assert.equal(getLeadAgentScope(null),'both');
   assert.equal(getLeadAgentScope({}),'both');
 });

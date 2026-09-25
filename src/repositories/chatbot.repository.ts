@@ -1,6 +1,7 @@
 import { Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { publishConversationEvent } from "@/server/realtime/conversation-events";
+import { conversationAgentWhere, type LeadAccessUser } from "@/lib/lead-source-access";
 import { withInboundLock } from "@/server/realtime/inbound-lock";
 import { GIOVANA_AGENT_ID } from "@/config/giovana";
 
@@ -262,13 +263,13 @@ export class ChatbotRepository {
     });
   }
 
-  async countConversations(user?: Pick<User, "id" | "role">) {
+  async countConversations(user?: LeadAccessUser) {
     return prisma.chatConversation.count({
       where: buildConversationAccessWhere(user),
     });
   }
 
-  async listConversations(params?: { skip?: number; take?: number; ids?: string[]; user?: Pick<User, "id" | "role"> }) {
+  async listConversations(params?: { skip?: number; take?: number; ids?: string[]; user?: LeadAccessUser }) {
     return prisma.chatConversation.findMany({
       where: { ...buildConversationAccessWhere(params?.user), ...(params?.ids ? { id: { in: params.ids } } : {}) },
       select: {
@@ -314,7 +315,7 @@ export class ChatbotRepository {
     });
   }
 
-  async listConversationSummaries(user?: Pick<User, "id" | "role">) {
+  async listConversationSummaries(user?: LeadAccessUser) {
     return prisma.chatConversation.findMany({
       where: buildConversationAccessWhere(user),
       select: {
@@ -359,7 +360,7 @@ export class ChatbotRepository {
 
   async getConversationById(
     id: string,
-    user?: Pick<User, "id" | "role">,
+    user?: LeadAccessUser,
     messages?: { skip?: number; take?: number },
   ) {
     return prisma.chatConversation.findFirst({
@@ -468,7 +469,12 @@ export class ChatbotRepository {
   }
 }
 
-function buildConversationAccessWhere(user?: Pick<User, "id" | "role">): Prisma.ChatConversationWhereInput {
+function buildConversationAccessWhere(user?: LeadAccessUser): Prisma.ChatConversationWhereInput {
+  const agentWhere = conversationAgentWhere(user);
+  if (Object.keys(agentWhere).length > 0) {
+    return { deletedAt: null, ...agentWhere };
+  }
+
   if (user?.role === "EMPLOYEE") {
     return {
       deletedAt: null,

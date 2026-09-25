@@ -1,6 +1,6 @@
 import { ExpenseStatus, LeadStatus, Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { leadSourceWhere } from "@/lib/lead-source-access";
+import { conversationAgentWhere, leadSourceWhere, type LeadAccessUser } from "@/lib/lead-source-access";
 
 export type OverviewFilters = {
   from: Date;
@@ -55,7 +55,7 @@ const expenseStatusLabels: Record<ExpenseStatus, string> = {
 };
 
 export class OverviewRepository {
-  async getOverview(filters: OverviewFilters, user?: Pick<User, "id" | "role">): Promise<OverviewData> {
+  async getOverview(filters: OverviewFilters, user?: LeadAccessUser): Promise<OverviewData> {
     const leadWhere = buildLeadAccessWhere(user);
     const wonLeadWhere = buildWonLeadAccessWhere(user);
     const conversationWhere = buildConversationAccessWhere(user);
@@ -426,7 +426,10 @@ function buildWonLeadAccessWhere(user?: Pick<User, "id" | "role">): Prisma.LeadW
   return {};
 }
 
-function buildConversationAccessWhere(user?: Pick<User, "id" | "role">): Prisma.ChatConversationWhereInput {
+function buildConversationAccessWhere(user?: LeadAccessUser): Prisma.ChatConversationWhereInput {
+  const agentWhere = conversationAgentWhere(user);
+  if (Object.keys(agentWhere).length > 0) return agentWhere;
+
   if (user?.role === "EMPLOYEE") {
     return {
       OR: [
