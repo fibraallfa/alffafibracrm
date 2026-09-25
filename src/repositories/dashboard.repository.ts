@@ -1,6 +1,6 @@
-import { LeadStatus, Prisma, type User } from "@prisma/client";
+import { LeadStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { leadSourceWhere } from "@/lib/lead-source-access";
+import { leadSourceWhere, type LeadAccessUser } from "@/lib/lead-source-access";
 
 export type DashboardFilters = {
   from?: Date;
@@ -8,7 +8,7 @@ export type DashboardFilters = {
 };
 
 export class DashboardRepository {
-  async getMetrics(filters: DashboardFilters = {}, user?: Pick<User, "id" | "role">) {
+  async getMetrics(filters: DashboardFilters = {}, user?: LeadAccessUser) {
     const chartDateFilter = buildDateFilter(filters);
     const accessWhere = buildDashboardAccessWhere(user);
     const chartLeadWhere: Prisma.LeadWhereInput = { deletedAt: null, ...accessWhere, ...chartDateFilter };
@@ -92,21 +92,17 @@ function getLeadValue(lead: { planValue?: unknown; expectedValue: unknown; plan?
   return Number(lead.planValue ?? lead.expectedValue ?? lead.plan?.price ?? 0);
 }
 
-function buildDashboardAccessWhere(user?: Pick<User, "id" | "role">): Prisma.LeadWhereInput {
-  if (user?.role !== "EMPLOYEE") {
-    return {};
-  }
-
-  return { assignedUserId: user.id, ...leadSourceWhere(user) };
+function buildDashboardAccessWhere(user?: LeadAccessUser): Prisma.LeadWhereInput {
+  const sourceWhere = leadSourceWhere(user);
+  return user?.role === "EMPLOYEE" ? { assignedUserId: user.id, ...sourceWhere } : sourceWhere;
 }
 
-function buildWonAccessWhere(user?: Pick<User, "id" | "role">): Prisma.LeadWhereInput {
-  if (user?.role !== "EMPLOYEE") {
-    return {};
-  }
+function buildWonAccessWhere(user?: LeadAccessUser): Prisma.LeadWhereInput {
+  const sourceWhere = leadSourceWhere(user);
+  if (user?.role !== "EMPLOYEE") return sourceWhere;
 
   return {
-    ...leadSourceWhere(user),
+    ...sourceWhere,
     OR: [
       { closedByUserId: user.id },
       { closedByUserId: null, assignedUserId: user.id },

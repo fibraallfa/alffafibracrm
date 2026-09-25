@@ -406,24 +406,26 @@ function applyToBucket(
   }
 }
 
-function buildLeadAccessWhere(user?: Pick<User, "id" | "role">): Prisma.LeadWhereInput {
+function buildLeadAccessWhere(user?: LeadAccessUser): Prisma.LeadWhereInput {
+  const sourceWhere = leadSourceWhere(user);
   if (user?.role === "EMPLOYEE") {
-    return { assignedUserId: user.id, ...leadSourceWhere(user) };
+    return { assignedUserId: user.id, ...sourceWhere };
   }
-  return {};
+  return sourceWhere;
 }
 
-function buildWonLeadAccessWhere(user?: Pick<User, "id" | "role">): Prisma.LeadWhereInput {
+function buildWonLeadAccessWhere(user?: LeadAccessUser): Prisma.LeadWhereInput {
+  const sourceWhere = leadSourceWhere(user);
   if (user?.role === "EMPLOYEE") {
     return {
-      ...leadSourceWhere(user),
+      ...sourceWhere,
       OR: [
         { assignedUserId: user.id },
         { closedByUserId: user.id },
       ],
     };
   }
-  return {};
+  return sourceWhere;
 }
 
 function buildConversationAccessWhere(user?: LeadAccessUser): Prisma.ChatConversationWhereInput {
