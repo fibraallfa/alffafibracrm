@@ -1,7 +1,7 @@
 import { Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { publishConversationEvent } from "@/server/realtime/conversation-events";
-import { conversationAgentWhere, type LeadAccessUser } from "@/lib/lead-source-access";
+import { conversationAgentWhere, resolveLeadAgentScope, type LeadAccessUser } from "@/lib/lead-source-access";
 import { withInboundLock } from "@/server/realtime/inbound-lock";
 import { GIOVANA_AGENT_ID } from "@/config/giovana";
 
@@ -316,25 +316,32 @@ export class ChatbotRepository {
   }
 
   async listConversationSummaries(user?: LeadAccessUser, agentScope?: string) {
-    return prisma.chatConversation.findMany({
-      where: buildConversationAccessWhere(user, agentScope),
-      select: {
-        id: true,
-        state: true,
-        ownerUserId: true,
-        updatedAt: true,
-        messages: {
-          select: {
-            id: true,
-            direction: true,
-            createdAt: true,
-          },
-          orderBy: { createdAt: "desc" },
-          take: 5,
-        },
-      },
-      orderBy: { updatedAt: "desc" },
-    });
+    const scope = resolveLeadAgentScope(user, agentScope);
+    const access = scope === "giovana"
+      ? Prisma.sql`AND c."agentId" = ${GIOVANA_AGENT_ID}::uuid`
+      : scope === "cris"
+        ? Prisma.sql`AND (c."agentId" IS NULL OR c."agentId" <> ${GIOVANA_AGENT_ID}::uuid)`
+        : user?.role === "EMPLOYEE"
+          ? Prisma.sql`AND c."ownerUserId" = ${user.id}::uuid`
+          : Prisma.empty;
+    // Bound the messages inside PostgreSQL. Nested relation queries can fetch
+    // the entire history before applying a per-conversation limit in the client.
+    const rows = await prisma.$queryRaw<Array<{
+      id: string; state: string; ownerUserId: string | null; updatedAt: Date;
+      messages: Array<{ direction: string; createdAt: string }>;
+    }>>(Prisma.sql`
+      SELECT c.id, c.state, c."ownerUserId", c."updatedAt",
+        COALESCE((SELECT json_agg(m) FROM (
+          SELECT direction, "createdAt" FROM "ChatMessage"
+          WHERE "conversationId" = c.id ORDER BY "createdAt" DESC LIMIT 5
+        ) m), '[]'::json) AS messages
+      FROM "ChatConversation" c
+      WHERE c."deletedAt" IS NULL ${access}
+      ORDER BY c."updatedAt" DESC
+    `);
+    return rows.map(row => ({ ...row, messages: row.messages.map(message => ({
+      ...message, createdAt: new Date(message.createdAt),
+    })) }));
   }
 
   async listAutoFollowUpCandidates() {

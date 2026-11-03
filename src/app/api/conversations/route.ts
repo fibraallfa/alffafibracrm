@@ -38,7 +38,8 @@ export async function GET(request: Request) {
         includeSummary: searchParams.get("includeSummary") !== "0",
         filter: filter === "unavailable" || filter === "finished" || filter === "stalled" ? filter : "all",
       }),
-      conversationService.listAssignableUsers(),
+      // Assignment options are supplementary; do not discard the inbox if they fail.
+      conversationService.listAssignableUsers().catch(() => []),
     ]);
 
     return NextResponse.json(successResponse("Conversas consultadas.", { conversations, users }));

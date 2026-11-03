@@ -108,6 +108,7 @@ export function ConversationCenter() {
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSavingTags, setIsSavingTags] = useState(false);
@@ -139,7 +140,7 @@ export function ConversationCenter() {
 
   async function loadSummary() {
     if (summaryRequestRef.current) return;
-    const wait = 10_000 - (Date.now() - summaryUpdatedAt.current);
+    const wait = 60_000 - (Date.now() - summaryUpdatedAt.current);
     if (wait > 0) {
       if (!summaryTimerRef.current) summaryTimerRef.current = setTimeout(() => {
         summaryTimerRef.current = null;
@@ -149,6 +150,7 @@ export function ConversationCenter() {
     }
     const controller = new AbortController();
     summaryRequestRef.current = controller;
+    const timeout = setTimeout(() => controller.abort(), 25000);
     try {
       const response = await fetch(`/api/conversations?summaryOnly=1&agent=${agentScope}`, { cache: "no-store", signal: controller.signal });
       const result = await response.json();
@@ -159,6 +161,7 @@ export function ConversationCenter() {
     } catch {
       // Counts are supplementary: never block opening a conversation.
     } finally {
+      clearTimeout(timeout);
       if (summaryRequestRef.current === controller) summaryRequestRef.current = null;
     }
   }
@@ -172,6 +175,12 @@ export function ConversationCenter() {
     listRequestRef.current?.abort();
     const controller = new AbortController();
     listRequestRef.current = controller;
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 25000);
+    setListError(null);
     const selectionAtStart = selectedIdRef.current;
     const reset = params?.reset ?? false;
     const currentCount = reset ? 0 : payload?.conversations.items.length ?? 0;
@@ -190,8 +199,9 @@ export function ConversationCenter() {
     try {
     const response = await fetch(`/api/conversations?offset=${offset}&limit=${limit}&filter=${filter}&agent=${agentScope}&includeSummary=0`, { cache: "no-store", signal: controller.signal });
     const result = await response.json();
-    if (result.status !== "success") {
-      setStatusMessage(result.message ?? "Não foi possível carregar as conversas.");
+    if (controller.signal.aborted) return;
+    if (!response.ok || result.status !== "success") {
+      setListError(result.message ?? "Não foi possível carregar as conversas.");
       setIsLoading(false);
       setIsLoadingMore(false);
       return;
@@ -242,8 +252,13 @@ export function ConversationCenter() {
 
     void loadSummary();
     } catch {
-      if (!controller.signal.aborted) setStatusMessage("Não foi possível carregar as conversas. Tente novamente.");
+      if (listRequestRef.current === controller && (timedOut || !controller.signal.aborted)) {
+        setListError(timedOut
+          ? "O carregamento demorou mais que o esperado. Tente novamente."
+          : "Não foi possível carregar as conversas. Tente novamente.");
+      }
     } finally {
+      clearTimeout(timeout);
       if (listRequestRef.current === controller) {
         setIsLoading(false);
         setIsLoadingMore(false);
@@ -257,6 +272,11 @@ export function ConversationCenter() {
     detailRequestRef.current?.abort();
     const controller = new AbortController();
     detailRequestRef.current = controller;
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 25000);
     const appendOlder = options?.appendOlder ?? false;
     if (!appendOlder) {
       selectedIdRef.current = conversationId;
@@ -309,8 +329,9 @@ export function ConversationCenter() {
       }
     }
     } catch {
-      if (!controller.signal.aborted) setStatusMessage("Não foi possível carregar as mensagens. Selecione a conversa para tentar novamente.");
+      if (detailRequestRef.current === controller && (timedOut || !controller.signal.aborted)) setStatusMessage("Não foi possível carregar as mensagens. Selecione a conversa para tentar novamente.");
     } finally {
+      clearTimeout(timeout);
       if (detailRequestRef.current === controller) {
         setIsLoadingDetail(false);
         detailRequestRef.current = null;
@@ -330,8 +351,10 @@ export function ConversationCenter() {
 
   useEffect(() => {
     const source = new EventSource("/api/conversations/stream");
+    let connected = false;
 
     source.addEventListener("connected", () => {
+      connected = true;
       setIsRealtimeConnected(true);
     });
 
@@ -353,11 +376,21 @@ export function ConversationCenter() {
     });
 
     source.onerror = () => {
+      connected = false;
       setIsRealtimeConnected(false);
+      source.close();
     };
+    const polling = setInterval(() => {
+      if (connected || document.visibilityState !== "visible" || listRequestRef.current) return;
+      void latestLoadRef.current({
+        preferredId: selectedIdRef.current, reset: true, silent: true,
+        limitOverride: visibleCountRef.current,
+      });
+    }, 15000);
 
     return () => {
       source.close();
+      clearInterval(polling);
       if (refreshTimer) clearTimeout(refreshTimer);
     };
   }, []);
@@ -631,7 +664,7 @@ export function ConversationCenter() {
               </select>
             ) : null}
             <span className={`h-2.5 w-2.5 rounded-full ${isRealtimeConnected ? "bg-emerald-500" : "bg-orange-500"}`} />
-            {currentUser?.id === "visual-preview" ? "Prévia local" : isRealtimeConnected ? "Conectado" : "Reconectando..."}
+            {currentUser?.id === "visual-preview" ? "Prévia local" : isRealtimeConnected ? "Conectado" : "Atualização a cada 15s"}
             <Button type="button" size="sm" className="shrink-0 whitespace-nowrap" onClick={() => setIsCreateOpen(true)}>
               <Plus className="h-4 w-4" />
               Novo número
@@ -702,6 +735,14 @@ export function ConversationCenter() {
               }}
             >
               {isLoading ? <p className="text-sm text-muted-foreground">Carregando conversas...</p> : null}
+              {listError ? (
+                <div role="alert" className="space-y-2 p-4 text-sm text-muted-foreground">
+                  <p>{listError}</p>
+                  <Button variant="outline" disabled={isLoading || isLoadingMore} onClick={() => {
+                    void loadConversations({ reset: !payload, preferredId: selectedIdRef.current });
+                  }}>Tentar novamente</Button>
+                </div>
+              ) : null}
               {filteredConversations.map((conversation) => (
                 <button
                   key={conversation.id}

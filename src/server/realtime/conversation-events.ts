@@ -15,7 +15,11 @@ function getConnectionString() {
 function getPool() {
   if (!globalThis.__alffaFibraConversationPool) {
     globalThis.__alffaFibraConversationPool = new Pool({
+      max: 2,
+      idleTimeoutMillis: 10000,
       connectionString: getConnectionString(),
+      connectionTimeoutMillis: 5000,
+      query_timeout: 5000,
       ssl: shouldUseSsl() ? { rejectUnauthorized: false } : undefined,
     });
   }
@@ -24,6 +28,8 @@ function getPool() {
 }
 
 export async function publishConversationEvent(payload: Record<string, unknown>) {
+  // Serverless clients poll; avoid a second database pool for notifications.
+  if (process.env.VERCEL) return;
   const connectionString = getConnectionString();
   if (!connectionString) return;
 
@@ -53,6 +59,8 @@ export async function publishConversationEvent(payload: Record<string, unknown>)
 export function createConversationListener() {
   return new Client({
     connectionString: getConnectionString(),
+    connectionTimeoutMillis: 5000,
+    query_timeout: 5000,
     ssl: shouldUseSsl() ? { rejectUnauthorized: false } : undefined,
   });
 }
